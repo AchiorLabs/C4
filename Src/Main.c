@@ -164,6 +164,43 @@ bool MainGetValueFlag(struct CmdLineArgumentParser *self,char *long_name)
 
 
 
+enum C4CTargetArchitecture MainGetArchitecture(char *targetArchiteture)
+{
+    if(ACHIOR_LABS_STRCMP(targetArchiteture,"x86_64"))
+    {
+        return C4C_TARGET_ARCH_X86_64;
+    }
+
+    return C4C_TARGET_OS_NONE;
+}
+
+
+
+enum C4CTargetOS MainGetOS(char *targetOS)
+{
+    if(ACHIOR_LABS_STRCMP(targetOS,"linux"))
+    {
+        return C4C_TARGET_OS_LINUX;
+    }
+
+
+    return C4C_TARGET_OS_NONE;
+}
+
+
+
+
+enum C4CTargetOS MainGetAssembler(char *targetAssembler)
+{
+    if(ACHIOR_LABS_STRCMP(targetAssembler,"gnuC"))
+    {
+        return C4C_TARGET_ASSEMBLER_GNUC;
+    }
+
+    return C4C_TARGET_OS_NONE;
+}
+
+
 
 
 
@@ -254,7 +291,36 @@ struct C4CCompiler MainSetUpC4COptions(struct CmdLineArgumentParser *parser,stru
     struct C4COutputOptions output_options;
     C4COutputOptionsNew(&output_options,emit_type,output_file_name);
 
+
+    char *targetName = NULL;
+    targetName = MainGetValueString(parser,"target");
+    if(ACHIOR_LABS_NULL(targetName))
+    {
+        MainFatal("no compilation target given : must provide a compilation target",bump);
+    }
+    
+    puts(targetName);
+
+    char *targetArchitecture = targetName;
+    char *dash               = ACHIOR_LABS_STRCHR(targetName,'-');
+    *dash                    = '\0';
+
+    char *targetOS           = dash + 1;
+    dash                     = ACHIOR_LABS_STRCHR(targetOS,'-');
+    *dash                    = '\0';
+
+    char *targetAssembler    = dash + 1;
+    
+
+    enum C4CTargetArchitecture architecture = MainGetArchitecture(targetArchitecture);
+    enum C4CTargetOS OS                     = MainGetOS(targetOS);
+    enum C4CTargetAssembler assembler       = MainGetAssembler(targetAssembler);
+
+
     struct C4CTarget C4CTarget;
+    C4CTargetNew(&C4CTarget,architecture,OS,assembler);
+
+
 
     struct C4COptions C4COptions;
     C4COptionsNew(&C4COptions,C4CTarget,frontend_options,middleend_options,backend_options,output_options);

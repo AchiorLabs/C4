@@ -1096,7 +1096,7 @@ struct ASTSumVariant *ParserParseSumVariant(struct Parser *self)
 		// consume the (
 		ParserExpectSymbol(self,"(","expected (");
 
-		kind = AST_SUM_VARIANT_UNIT;
+		
 
 		struct ASTType *type = ParserParseType(self);
 		if( ACHIOR_LABS_NULL(type))
@@ -1104,7 +1104,38 @@ struct ASTSumVariant *ParserParseSumVariant(struct Parser *self)
 			ACHIOR_LABS_PRINT("null argument type");
 		}
 
-		LinkedListPushBack(&fields,type);
+
+		if(ParserIsSymbol(self,")",0))
+		{
+			LinkedListPushBack(&fields,type);
+			kind = AST_SUM_VARIANT_UNIT;
+		}
+		else
+		{
+			kind = AST_SUM_VARIANT_TUPLE;
+			
+			while(true)
+			{
+				LinkedListPushBack(&fields,type);
+
+				if(ParserIsSymbol(self,")",0))
+				{
+					break;
+				}
+				else
+				{
+					ParserExpectSymbol(self,",","expected a ,after sum tuple field value");
+				}
+
+				type = ParserParseType(self);
+				if( ACHIOR_LABS_NULL(type))
+				{
+					ACHIOR_LABS_PRINT("null argument type");
+				}
+			}
+		}
+
+		
 
 		// consume the )
 		ParserExpectSymbol(self,")","expected )");

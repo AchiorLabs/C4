@@ -3,7 +3,7 @@
 
 CC=gcc
 OBJ=Objects
-SRC=./
+SRC=Src
 TARGET=Target
 
 OBJECTS= $(OBJ)/Support/BumpAllocator.o                   \
@@ -29,7 +29,7 @@ OBJECTS= $(OBJ)/Support/BumpAllocator.o                   \
 
 
 
-Target/Main: $(OBJECTS) Main.c
+Target/Main: $(OBJECTS) $(SRC)/Main.c
 	$(CC) $^ -o $@
 
 
