@@ -1,0 +1,27 @@
+{
+  "name": "c4-language",
+  "displayName": "C4 Language",
+  "description": "Syntax highlighting for C4 language",
+  "version": "0.0.1",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": ["Programming Languages"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "c4",
+        "aliases": ["C4", "c4"],
+        "extensions": [".c4"]
+      }
+    ],
+    "grammars": [
+      {
+        "language": "c4",
+        "scopeName": "source.c4",
+        "path": "./c4.tmLanguage.json"
+      }
+    ]
+  }
+}
