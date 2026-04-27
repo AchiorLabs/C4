@@ -6,23 +6,25 @@ OBJ=Objects
 SRC=Src
 TARGET=Target
 
-OBJECTS= $(OBJ)/Support/BumpAllocator.o                   \
-		 $(OBJ)/Support/String.o                          \
-		 $(OBJ)/Support/Log.o                             \
-		 $(OBJ)/Support/List.o                            \
-		 $(OBJ)/CmdLine/CmdLineArgumentList.o             \
-		 $(OBJ)/CmdLine/CmdLine.o                         \
-		 $(OBJ)/C4COptions/C4COptions.o                   \
-		 $(OBJ)/FrontEnd/Lexer/Token.o                    \
-		 $(OBJ)/FrontEnd/Lexer/Lexer.o                    \
-		 $(OBJ)/FrontEnd/AST/AST.o                        \
-		 $(OBJ)/FrontEnd/AST/ASTPrint.o                   \
-		 $(OBJ)/FrontEnd/Parser/Parser.o                  \
-		 $(OBJ)/FrontEnd/TreeWalker/TreeWalker.o          \
-		 $(OBJ)/FrontEnd/Driver/Driver.o                  \
-		 $(OBJ)/MiddleEnd/C/ASTToC.o                      \
-		 $(OBJ)/MiddleEnd/Driver/Driver.o                 \
-		 $(OBJ)/Driver/Driver.o                           \
+OBJECTS= $(OBJ)/Support/BumpAllocator.o                                               \
+		 $(OBJ)/Support/String.o                                                      \
+		 $(OBJ)/Support/Log.o                                                         \
+		 $(OBJ)/Support/List.o                                                        \
+		 $(OBJ)/Support/HashMap.o                                                     \
+		 $(OBJ)/CmdLine/CmdLineArgumentList.o                                         \
+		 $(OBJ)/CmdLine/CmdLine.o                                                     \
+		 $(OBJ)/C4COptions/C4COptions.o                                               \
+		 $(OBJ)/FrontEnd/Lexer/Token.o                                                \
+		 $(OBJ)/FrontEnd/Lexer/Lexer.o                                                \
+		 $(OBJ)/FrontEnd/AST/AST.o                                                    \
+		 $(OBJ)/FrontEnd/AST/ASTPrint.o                                               \
+		 $(OBJ)/FrontEnd/Parser/Parser.o                                              \
+		 $(OBJ)/FrontEnd/TreeWalker/TreeWalker.o                                      \
+		 $(OBJ)/FrontEnd/IdentifierResolution/IdentifierResolution.o                  \
+		 $(OBJ)/FrontEnd/Driver/Driver.o                                              \
+		 $(OBJ)/MiddleEnd/C/ASTToC.o                                                  \
+		 $(OBJ)/MiddleEnd/Driver/Driver.o                                             \
+		 $(OBJ)/Driver/Driver.o                                                       \
 
 
 
@@ -46,6 +48,10 @@ $(OBJ)/Support/Log.o: $(SRC)/Support/Log.c
 
 
 $(OBJ)/Support/List.o: $(SRC)/Support/List.c
+	$(CC) -c $^ -o $@
+
+
+$(OBJ)/Support/HashMap.o: $(SRC)/Support/HashMap.c
 	$(CC) -c $^ -o $@
 
 
@@ -92,6 +98,10 @@ $(OBJ)/FrontEnd/Parser/Parser.o: $(SRC)/FrontEnd/Parser/Parser.c
 
 
 $(OBJ)/FrontEnd/TreeWalker/TreeWalker.o: $(SRC)/FrontEnd/TreeWalker/TreeWalker.c
+	$(CC) -c $^ -o $@
+
+
+$(OBJ)/FrontEnd/IdentifierResolution/IdentifierResolution.o: $(SRC)/FrontEnd/IdentifierResolution/IdentifierResolution.c
 	$(CC) -c $^ -o $@
 
 
