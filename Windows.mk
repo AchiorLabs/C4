@@ -1,118 +1,65 @@
-
-
-
-CC=gcc
-OBJ=Objects
+CC=cl
 SRC=Src
+OBJ=Objects
 TARGET=Target
 
-OBJECTS= $(OBJ)/Support/BumpAllocator.o                   \
-		 $(OBJ)/Support/String.o                          \
-		 $(OBJ)/Support/Log.o                             \
-		 $(OBJ)/Support/List.o                            \
-		 $(OBJ)/CmdLine/CmdLineArgumentList.o             \
-		 $(OBJ)/CmdLine/CmdLine.o                         \
-		 $(OBJ)/C4COptions/C4COptions.o                   \
-		 $(OBJ)/FrontEnd/Lexer/Token.o                    \
-		 $(OBJ)/FrontEnd/Lexer/Lexer.o                    \
-		 $(OBJ)/FrontEnd/AST/AST.o                        \
-		 $(OBJ)/FrontEnd/AST/ASTPrint.o                   \
-		 $(OBJ)/FrontEnd/Parser/Parser.o                  \
-		 $(OBJ)/FrontEnd/TreeWalker/TreeWalker.o          \
-		 $(OBJ)/FrontEnd/Driver/Driver.o                  \
-		 $(OBJ)/MiddleEnd/C/ASTToC.o                      \
-		 $(OBJ)/MiddleEnd/Driver/Driver.o                 \
-		 $(OBJ)/Driver/Driver.o                           \
+CFLAGS=/nologo /c
+OUTOBJ=/Fo:
+OUTEXE=/Fe:
 
 
+$(OBJ)/FrontEnd/Lexer/Lexer.obj: $(SRC)/FrontEnd/Lexer/Lexer.c
+	$(CC) $(CFLAGS) $< $(OUTOBJ)$@
+
+$(OBJ)/FrontEnd/AST/AST.obj: $(SRC)/FrontEnd/AST/AST.c
+	$(CC) $(CFLAGS) $< $(OUTOBJ)$@
+
+$(OBJ)/FrontEnd/AST/ASTPrint.obj: $(SRC)/FrontEnd/AST/ASTPrint.c
+	$(CC) $(CFLAGS) $< $(OUTOBJ)$@
+
+$(OBJ)/FrontEnd/Parser/Parser.obj: $(SRC)/FrontEnd/Parser/Parser.c
+	$(CC) $(CFLAGS) $< $(OUTOBJ)$@
+
+$(OBJ)/FrontEnd/TreeWalker/TreeWalker.obj: $(SRC)/FrontEnd/TreeWalker/TreeWalker.c
+	$(CC) $(CFLAGS) $< $(OUTOBJ)$@
+
+$(OBJ)/FrontEnd/Driver/Driver.obj: $(SRC)/FrontEnd/Driver/Driver.c
+	$(CC) $(CFLAGS) $< $(OUTOBJ)$@
 
 
+$(OBJ)/MiddleEnd/C/ASTToC.obj: $(SRC)/MiddleEnd/C/ASTToC.c
+	$(CC) $(CFLAGS) $< $(OUTOBJ)$@
+
+$(OBJ)/MiddleEnd/Driver/Driver.obj: $(SRC)/MiddleEnd/Driver/Driver.c
+	$(CC) $(CFLAGS) $< $(OUTOBJ)$@
 
 
-Target/Main: $(OBJECTS) $(SRC)/Main.c
-	$(CC) $^ -o $@
+$(OBJ)/Driver/Driver.obj: $(SRC)/Driver/Driver.c
+	$(CC) $(CFLAGS) $< $(OUTOBJ)$@
 
+# Linking the final executable (Main.exe)
 
-$(OBJ)/Support/BumpAllocator.o: $(SRC)/Support/BumpAllocator.c
-	$(CC) -c $^ -o $@
+$(TARGET)/Main.exe: \
+$(OBJ)/FrontEnd/Lexer/Lexer.obj \
+$(OBJ)/FrontEnd/AST/AST.obj \
+$(OBJ)/FrontEnd/AST/ASTPrint.obj \
+$(OBJ)/FrontEnd/Parser/Parser.obj \
+$(OBJ)/FrontEnd/TreeWalker/TreeWalker.obj \
+$(OBJ)/FrontEnd/Driver/Driver.obj \
+$(OBJ)/MiddleEnd/C/ASTToC.obj \
+$(OBJ)/MiddleEnd/Driver/Driver.obj \
+$(OBJ)/Driver/Driver.obj
+	$(CC) $^ /Fe:$(TARGET)/Main.exe
 
+# Ensure Target directory exists
+$(TARGET):
+	if not exist $(TARGET) mkdir $(TARGET)
 
-$(OBJ)/Support/String.o: $(SRC)/Support/String.c
-	$(CC) -c $^ -o $@
+# Default build target
+all: $(TARGET) $(TARGET)/Main.exe
 
-
-$(OBJ)/Support/Log.o: $(SRC)/Support/Log.c
-	$(CC) -c $^ -o $@
-
-
-$(OBJ)/Support/List.o: $(SRC)/Support/List.c
-	$(CC) -c $^ -o $@
-
-
-
-
-$(OBJ)/CmdLine/CmdLineArgumentList.o:$(SRC)/CmdLine/CmdLineArgumentList.c
-	$(CC) -c $^ -o $@
-
-$(OBJ)/CmdLine/CmdLine.o:$(SRC)/CmdLine/CmdLine.c
-	$(CC) -c $^ -o $@
-
-
-
-
-$(OBJ)/C4COptions/C4COptions.o:$(SRC)/C4COptions/C4COptions.c
-	$(CC) -c $^ -o $@
-
-
-
-
-
-$(OBJ)/FrontEnd/Lexer/Token.o: $(SRC)/FrontEnd/Lexer/Token.c
-	$(CC) -c $^ -o $@
-
-
-$(OBJ)/FrontEnd/Lexer/Lexer.o: $(SRC)/FrontEnd/Lexer/Lexer.c
-	$(CC) -c $^ -o $@
-
-
-
-
-$(OBJ)/FrontEnd/AST/AST.o: $(SRC)/FrontEnd/AST/AST.c
-	$(CC) -c $^ -o $@
-
-
-$(OBJ)/FrontEnd/AST/ASTPrint.o: $(SRC)/FrontEnd/AST/ASTPrint.c
-	$(CC) -c $^ -o $@
-
-
-$(OBJ)/FrontEnd/Parser/Parser.o: $(SRC)/FrontEnd/Parser/Parser.c
-	$(CC) -c $^ -o $@
-
-
-
-
-$(OBJ)/FrontEnd/TreeWalker/TreeWalker.o: $(SRC)/FrontEnd/TreeWalker/TreeWalker.c
-	$(CC) -c $^ -o $@
-
-
-$(OBJ)/FrontEnd/Driver/Driver.o: $(SRC)/FrontEnd/Driver/Driver.c
-	$(CC) -c $^ -o $@
-
-
-
-$(OBJ)/MiddleEnd/C/ASTToC.o: $(SRC)/MiddleEnd/C/ASTToC.c
-	$(CC) -c $^ -o $@
-
-
-$(OBJ)/MiddleEnd/Driver/Driver.o: $(SRC)/MiddleEnd/Driver/Driver.c
-	$(CC) -c $^ -o $@
-
-
-$(OBJ)/Driver/Driver.o: $(SRC)/Driver/Driver.c
-	$(CC) -c $^ -o $@
-
-
+# --- Clean ---
 
 clean:
-	rm -rf $(OBJ) $(TARGET)/Main
-	bash SetUp.sh
+	if exist $(OBJ) rmdir /s /q $(OBJ)
+	if exist $(TARGET)\Main.exe del /f /q $(TARGET)\Main.exe
