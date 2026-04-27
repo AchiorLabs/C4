@@ -267,7 +267,7 @@ void IdentifierResolutionSumVariants(struct IdentifierResolution *self,struct Li
 
 
 void IdentifierResolutionImplDecl(struct IdentifierResolution *self,struct ASTImplDecl *decl,struct HashMap *identMap)
-{
+{puts("hmm$");
     if( ACHIOR_LABS_NULL(decl))
     {
         return;
@@ -340,7 +340,8 @@ void IdentifierResolutionFunctionDecl(struct IdentifierResolution *self,struct A
         IdentifierResolutionFunctionArgument(self,LinkedListAt(&decl->arguments,i),newIdentMap);
     }
 
-    if(ACHIOR_LABS_NULL(decl->block))
+    
+    if(ACHIOR_LABS_NOT_NULL(decl->block))
     {
         IdentifierResolutionBlockStmt(self,decl->block,newIdentMap);
     }
@@ -386,7 +387,7 @@ void IdentifierResolutionFunctionArgument(struct IdentifierResolution *self,stru
     {
         if(ACHIOR_LABS_TRUE(entry->isCurrent))
         {
-            puts("function argument redeclared : [error]");
+            //puts("function argument redeclared : [error]");
             return;
         }
         
@@ -663,11 +664,12 @@ void IdentifierResolutionReturnStmt(struct IdentifierResolution *self,struct AST
 
 
 void IdentifierResolutionExpression(struct IdentifierResolution *self,struct ASTExpression *expr,struct HashMap *identMap)
-{
+{    
     if( ACHIOR_LABS_NULL(expr))
     {
         return;
     }
+    
 
 	switch(expr->type)
     {
@@ -1049,6 +1051,7 @@ void IdentifierResolutionVariableExpr(struct IdentifierResolution *self,void *ex
         puts("illegal use of an undeclared variable identifier : [error]");
         return;
     }
+
 
     variable->ident.value = entry->ident;
 }
