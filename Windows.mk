@@ -87,6 +87,3 @@ $(OBJ)/Driver/Driver.obj: $(SRC)/Driver/Driver.c
 	$(CC) $(CFLAGS) $< $(OUTOBJ)$@
 
 
-clean:
-	if exist $(OBJ) rmdir /s /q $(OBJ)
-	if exist $(TARGET)\Main.exe del /f /q $(TARGET)\Main.exe
