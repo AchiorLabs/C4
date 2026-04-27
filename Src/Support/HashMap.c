@@ -321,13 +321,13 @@ struct HashMap *HashMapCopy(struct HashMap *self)
 
     size_t sizeOfHashMap            = ACHIOR_LABS_SIZEOF(struct HashMap);
     struct HashMap hashMapCopy;     
-        bool created                    = HashMapNew(&hashMapCopy, self->capacity,self->bump);
+    bool created                    = HashMapNew(&hashMapCopy, self->capacity,self->bump);
 
 
-        if(! created)
-        {
-            return NULL;
-        }
+    if(! created)
+    {
+        return NULL;
+    }
 
 
 
