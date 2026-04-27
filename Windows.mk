@@ -13,6 +13,7 @@ $(OBJ)/Support/BumpAllocator.obj \
 $(OBJ)/Support/String.obj \
 $(OBJ)/Support/Log.obj \
 $(OBJ)/Support/List.obj \
+$(OBJ)/Support/HashMap.obj \
 $(OBJ)/CmdLine/CmdLineArgumentList.obj \
 $(OBJ)/CmdLine/CmdLine.obj \
 $(OBJ)/C4COptions/C4COptions.obj \
@@ -22,6 +23,7 @@ $(OBJ)/FrontEnd/AST/AST.obj \
 $(OBJ)/FrontEnd/AST/ASTPrint.obj \
 $(OBJ)/FrontEnd/Parser/Parser.obj \
 $(OBJ)/FrontEnd/TreeWalker/TreeWalker.obj \
+$(OBJ)/FrontEnd/IdentifierResolution/IdentifierResolution.obj \
 $(OBJ)/FrontEnd/Driver/Driver.obj \
 $(OBJ)/MiddleEnd/C/ASTToC.obj \
 $(OBJ)/MiddleEnd/Driver/Driver.obj \
@@ -44,6 +46,9 @@ $(OBJ)/Support/Log.obj: $(SRC)/Support/Log.c
 $(OBJ)/Support/List.obj: $(SRC)/Support/List.c
 	$(CC) $(CFLAGS) $< $(OUTOBJ)$@
 
+$(OBJ)/Support/HashMap.obj: $(SRC)/Support/HashMap.c
+	$(CC) $(CFLAGS) $< $(OUTOBJ)$@
+
 
 $(OBJ)/CmdLine/CmdLineArgumentList.obj: $(SRC)/CmdLine/CmdLineArgumentList.c
 	$(CC) $(CFLAGS) $< $(OUTOBJ)$@
@@ -53,6 +58,7 @@ $(OBJ)/CmdLine/CmdLine.obj: $(SRC)/CmdLine/CmdLine.c
 
 $(OBJ)/C4COptions/C4COptions.obj: $(SRC)/C4COptions/C4COptions.c
 	$(CC) $(CFLAGS) $< $(OUTOBJ)$@
+
 
 $(OBJ)/FrontEnd/Lexer/Token.obj: $(SRC)/FrontEnd/Lexer/Token.c
 	$(CC) $(CFLAGS) $< $(OUTOBJ)$@
@@ -72,6 +78,9 @@ $(OBJ)/FrontEnd/Parser/Parser.obj: $(SRC)/FrontEnd/Parser/Parser.c
 $(OBJ)/FrontEnd/TreeWalker/TreeWalker.obj: $(SRC)/FrontEnd/TreeWalker/TreeWalker.c
 	$(CC) $(CFLAGS) $< $(OUTOBJ)$@
 
+$(OBJ)/FrontEnd/IdentifierResolution/IdentifierResolution.obj: $(SRC)/FrontEnd/IdentifierResolution/IdentifierResolution.c
+	$(CC) $(CFLAGS) $< $(OUTOBJ)$@
+
 $(OBJ)/FrontEnd/Driver/Driver.obj: $(SRC)/FrontEnd/Driver/Driver.c
 	$(CC) $(CFLAGS) $< $(OUTOBJ)$@
 
@@ -82,8 +91,6 @@ $(OBJ)/MiddleEnd/C/ASTToC.obj: $(SRC)/MiddleEnd/C/ASTToC.c
 $(OBJ)/MiddleEnd/Driver/Driver.obj: $(SRC)/MiddleEnd/Driver/Driver.c
 	$(CC) $(CFLAGS) $< $(OUTOBJ)$@
 
-
+=
 $(OBJ)/Driver/Driver.obj: $(SRC)/Driver/Driver.c
 	$(CC) $(CFLAGS) $< $(OUTOBJ)$@
-
-
