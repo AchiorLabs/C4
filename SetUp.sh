@@ -86,6 +86,6 @@ esac
 echo "[+] Installlation complete!!"
 echo "Have fun using c4 :)"
 
-
-sudo bash DevTools/ResetSyntaxHighlighting.sh
-sudo bash DevTools/SetSyntaxHighlighting.sh
+exit 0
+bash DevTools/ResetSyntaxHighlighting.sh
+bash DevTools/SetSyntaxHighlighting.sh
