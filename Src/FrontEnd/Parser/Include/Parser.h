@@ -193,6 +193,11 @@ struct ASTStructProperty *ParserParseStructProperty(
 
 
 
+struct ASTImplDecl *ParserParseImplDecl(struct Parser *self);
+
+
+struct ASTFunctionDecl *ParserParseImplMethod(struct Parser *self,struct Token structIdent,bool is_pub,bool is_static,bool is_naked,bool is_foreign,struct String foreign_abi,bool has_link_name,struct String link_name);
+
 struct ASTSumDecl *ParserParseSumDecl(struct Parser *self);
 
 
@@ -328,6 +333,9 @@ struct ASTBreakStmt *ParserParseBreakStmt(
 
 
 
+struct ASTMatchStmt *ParserParseMatchStmt(struct Parser *self);
+
+
 enum ASTAssignmentOperator ParserGetAssignmentOperator(
 	struct Parser *self,
 	struct Token token
@@ -457,6 +465,10 @@ struct ASTStructProperty *ParserMakeStructProperty(
 
 
 struct ASTStructProperty *ParserMakeStructProperty(struct Parser *self,struct ASTType *type,struct Token ident);
+
+
+
+struct ASTImplDecl *ParserMakeImplDecl(struct Parser *self,struct Token ident,struct LinkedList methods); 
 
 struct ASTSumDecl *ParserMakeSumDecl(struct Parser *self,struct Token ident,struct LinkedList variants);
 

@@ -53,5 +53,10 @@ struct Parser FrontEndDriverRun(struct C4CFrontEndOptions *options,struct BumpAl
 		return parser;
 	}
 
+	struct IdentifierResolution resolver;
+	IdentifierResolutionNew(&resolver,parser.astProgram,options->input_file_name,options->global_counter,bump);
+
+	options->global_counter = resolver.globalCounter;
+
 	return parser;
 }

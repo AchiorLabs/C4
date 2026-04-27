@@ -4,3 +4,4 @@
 #include "../Support/Include/String.h"
 #include "../Support/Include/Log.h"
 #include "../Support/Include/List.h"
+#include "../Support/Include/HashMap.h"

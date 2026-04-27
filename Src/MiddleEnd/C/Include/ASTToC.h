@@ -27,6 +27,9 @@ void ASTToCStructProperty(struct ASTToC *self,struct ASTStructProperty *property
 
 void ASTToCUnionDecl(struct ASTToC *self,struct ASTUnionDecl *decl);
 
+
+void ASTToCImplDecl(struct ASTToC *self,struct ASTImplDecl *decl);
+
 void ASTToCSumDecl(struct ASTToC *self,struct ASTSumDecl *decl);
 
 void ASTToCSumEnum(struct ASTToC *self,char *ident,struct LinkedList variants);
