@@ -160,6 +160,20 @@ bool ASTUnionDeclNew(struct ASTUnionDecl *self,struct Token ident,struct LinkedL
 
 
 
+bool ASTImplDeclNew(struct ASTImplDecl *self,struct Token ident,struct LinkedList methods)
+{
+	if( ACHIOR_LABS_NULL(self))
+	{
+		return false;
+	}
+
+	self->ident   = ident;
+	self->methods = methods;
+
+	return true;
+}
+
+
 bool ASTSumNamedFieldNew(struct ASTSumNamedField *self,struct Token ident,struct ASTType *type)
 {
 	if( ACHIOR_LABS_NULL(self))
@@ -461,6 +475,54 @@ bool ASTReturnStmtNew(struct ASTReturnStmt *self,struct ASTExpression *expr)
 
 	return true;
 }
+
+
+
+
+bool ASTPatternNew(struct ASTPattern *self,enum ASTPatternKind kind,struct Token ident,struct LinkedList bindings)
+{
+	if( ACHIOR_LABS_NULL(self))
+	{
+		return false;
+	}
+
+	self->kind     = kind;
+	self->ident    = ident;
+	self->bindings = bindings;
+
+	return true;
+}
+
+
+
+bool ASTMatchArmNew(struct ASTMatchArm *self,struct ASTPattern *pattern,struct ASTBlockStmt *stmt)
+{
+	if( ACHIOR_LABS_NULL(self))
+	{
+		return false;
+	}
+
+	self->pattern = pattern;
+	self->stmt    = stmt;
+
+	return true;
+}
+
+
+bool ASTMatchStmtNew(struct ASTMatchStmt *self,struct ASTExpression *expr,struct LinkedList arms)
+{
+	if( ACHIOR_LABS_NULL(self))
+	{
+		return false;
+	}
+
+	self->expr = expr;
+	self->arms = arms;
+
+	return true;
+}
+
+
 
 bool ASTExpressionNew(struct ASTExpression *self,enum ASTExpressionType type,void *expr)
 {

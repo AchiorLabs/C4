@@ -1,3 +1,6 @@
 *test*
 Target
 Objects
+C4VscodeExtension
+.vscode
+package-lock.json
