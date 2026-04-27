@@ -4,6 +4,145 @@ set -e  # Stop on error
 
 echo "Setting up C4 syntax highlighters for your editors..."
 
+
+# --------------------------------------------
+# Detect distro
+# --------------------------------------------
+if [ -f /etc/os-release ]; then
+  . /etc/os-release
+  DISTRO=$ID
+else
+  echo "Cannot detect Linux distribution"
+  exit 1
+fi
+
+echo "[+] Detected distro: $DISTRO"
+
+# --------------------------------------------
+# Install Node.js (v20 LTS)
+# --------------------------------------------
+
+install_node_debian() {
+  echo "[+] Installing Node.js (Debian/Ubuntu)..."
+  sudo apt update -y
+  sudo apt install -y curl ca-certificates gnupg
+
+  curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+  sudo apt install -y nodejs
+}
+
+install_node_arch() {
+  echo "[+] Installing Node.js (Arch)..."
+  sudo pacman -Sy --noconfirm nodejs npm
+}
+
+install_node_fedora() {
+  echo "[+] Installing Node.js (Fedora)..."
+  sudo dnf install -y nodejs npm
+}
+
+install_node_opensuse() {
+  echo "[+] Installing Node.js (OpenSUSE)..."
+  sudo zypper install -y nodejs npm
+}
+
+install_node_alpine() {
+  echo "[+] Installing Node.js (Alpine)..."
+  sudo apk add --no-cache nodejs npm
+}
+
+# --------------------------------------------
+# Check Node.js
+# --------------------------------------------
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "Node.js not found. Installing..."
+
+  case "$DISTRO" in
+    ubuntu|debian|linuxmint|pop)
+      install_node_debian
+      ;;
+    arch|manjaro)
+      install_node_arch
+      ;;
+    fedora)
+      install_node_fedora
+      ;;
+    opensuse*|suse)
+      install_node_opensuse
+      ;;
+    alpine)
+      install_node_alpine
+      ;;
+    *)
+      echo "Unsupported distro: $DISTRO"
+      echo "Please install Node.js manually:"
+      echo "https://nodejs.org/"
+      exit 1
+      ;;
+  esac
+fi
+
+# --------------------------------------------
+# Verify Node version
+# --------------------------------------------
+
+NODE_VERSION=$(node -v | sed 's/v//')
+MAJOR=$(echo "$NODE_VERSION" | cut -d. -f1)
+
+if [ "$MAJOR" -lt 18 ]; then
+  echo "Node version too old ($NODE_VERSION). Upgrading..."
+
+  case "$DISTRO" in
+    ubuntu|debian|linuxmint|pop)
+      install_node_debian
+      ;;
+    arch|manjaro)
+      sudo pacman -S --noconfirm nodejs npm
+      ;;
+    fedora)
+      sudo dnf upgrade -y nodejs
+      ;;
+    opensuse*|suse)
+      sudo zypper update -y nodejs
+      ;;
+    alpine)
+      sudo apk upgrade nodejs npm
+      ;;
+    *)
+      echo "Cannot auto-upgrade Node on this distro"
+      exit 1
+      ;;
+  esac
+fi
+
+echo "Node.js OK ($(node -v))"
+
+# --------------------------------------------
+# Check npm
+# --------------------------------------------
+
+echo "Checking npm..."
+
+if ! command -v npm >/dev/null 2>&1; then
+  echo "npm missing. Attempting to install..."
+
+  case "$DISTRO" in
+    arch|manjaro)
+      sudo pacman -S --noconfirm npm
+      ;;
+    *)
+      echo "npm should come with Node.js. Reinstalling Node..."
+      install_node_debian
+      ;;
+  esac
+fi
+
+echo "npm OK ($(npm -v))"
+
+
+
+
 # Get the absolute path to devtools folder
 DEVTOOLS_DIR=$(realpath "$(dirname "$0")")
 
@@ -57,6 +196,9 @@ if command -v code &> /dev/null; then
 }
 EOF
 
+
+
+
     # ----------------------------------------
     # Copy TextMate grammar
     # ----------------------------------------
@@ -102,6 +244,7 @@ EOF
     echo "Installing extension into VS Code..."
     code --install-extension "$VSIX_FILE" --force
 
+
     # ----------------------------------------
     # Workspace settings (file association)
     # ----------------------------------------
@@ -131,6 +274,8 @@ else
 fi
 
 
+
+
 # ============================================
 # Vim Setup
 # ============================================
@@ -138,8 +283,10 @@ if command -v vim &> /dev/null; then
     echo ""
     echo "Configuring Vim..."
 
+
     mkdir -p ~/.vim/syntax
     mkdir -p ~/.vim/ftdetect
+
 
     # Filetype detection
     cat > ~/.vim/ftdetect/c4.vim << EOF
@@ -195,6 +342,7 @@ EOF
 
     echo "Vim syntax highlighting installed"
     echo "  Restart Vim and open a .c4 file"
+
 else
     echo ""
     echo "  Vim not found, skipping..."
