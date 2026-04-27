@@ -104,4 +104,9 @@ void ASTToCAsPtrExpr(struct ASTToC *self,void *expr);
 
 void ASTToCLenExpr(struct ASTToC *self,void *expr);
 
+
+void ASTToCStructAccessExpr(struct ASTToC *self,struct ASTStructAccessExpr *expr);
+
+void ASTToCStructPointerAccessExpr(struct ASTToC *self,struct ASTStructPointerAccessExpr *expr);
+
 #endif

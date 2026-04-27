@@ -821,12 +821,12 @@ void ASTToCExpression(struct ASTToC *self,struct ASTExpression *expr)
         }
         case AST_EXPRESSION_STRUCT_ACCESS:
         {
-            //ASTToCStructAccessExpr(self,expr->expr);
+            ASTToCStructAccessExpr(self,expr->expr);
             break;
         }
         case AST_EXPRESSION_STRUCT_POINTER_ACCESS:
         {
-            //ASTToCStructPointerAccessExpr(self,expr->expr);
+            ASTToCStructPointerAccessExpr(self,expr->expr);
             break;
         }
         default:
@@ -839,6 +839,33 @@ void ASTToCExpression(struct ASTToC *self,struct ASTExpression *expr)
 
 
 
+
+void ASTToCStructAccessExpr(struct ASTToC *self,struct ASTStructAccessExpr *expr)
+{
+    if( ACHIOR_LABS_NULL(expr))
+    {
+        return;
+    }
+
+    ASTToCExpression(self,expr->lhs);
+    ACHIOR_LABS_FPRINTF(self->fileHandle,".");
+    ASTToCIdentifier(self,expr->member);
+}
+
+
+
+
+void ASTToCStructPointerAccessExpr(struct ASTToC *self,struct ASTStructPointerAccessExpr *expr)
+{
+    if( ACHIOR_LABS_NULL(expr))
+    {
+        return;
+    }
+
+    ASTToCExpression(self,expr->lhs);
+    ACHIOR_LABS_FPRINTF(self->fileHandle,"->");
+    ASTToCIdentifier(self,expr->member);
+}
 
 
 void ASTToCLenExpr(struct ASTToC *self,void *expr)
