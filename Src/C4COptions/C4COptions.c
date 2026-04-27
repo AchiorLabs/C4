@@ -3,16 +3,16 @@
 
 
 
-bool C4CTargetNew(struct C4CTarget *self,enum C4CTargetArchitecture arch,enum C4CTargetOS os,enum C4CAssemblySyntax asm_syntax)
+bool C4CTargetNew(struct C4CTarget *self,enum C4CTargetArchitecture arch,enum C4CTargetOS os,enum C4CTargetAssembler assembler)
 {
     if(ACHIOR_LABS_NULL(self))
     {
         return false;
     }
 
-    self->arch       = arch;
-    self->os         = os;
-    self->asm_syntax = asm_syntax;
+    self->arch      = arch;
+    self->os        = os;
+    self->assembler = assembler;
 
     return true;
 }

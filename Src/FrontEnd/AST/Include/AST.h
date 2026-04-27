@@ -44,6 +44,7 @@ enum ASTDeclarationType
 	AST_DECLARATION_NONE,
 	AST_DECLARATION_STRUCT,
 	AST_DECLARATION_UNION,
+	AST_DECLARATION_IMPL,
 	AST_DECLARATION_SUM,
 	AST_DECLARATION_FUNCTION,
 	AST_DECLARATION_FOREIGN,
@@ -83,6 +84,7 @@ enum ASTDataType
 	AST_DATA_TYPE_FUNCTION,
 	AST_DATA_TYPE_AGGREGATE,
 	AST_DATA_TYPE_STRUCT,
+	AST_DATA_TYPE_UNION,
 };
 
 
@@ -99,6 +101,7 @@ bool ASTStructTypeNew(struct ASTStructType *self,struct Token ident,struct Layou
 struct ASTAggregateType
 {
 	struct Token ident;
+	struct Layout layout;
 };
 
 bool ASTAggregateTypeNew(struct ASTAggregateType *self,struct Token ident);
@@ -193,6 +196,15 @@ struct ASTUnionDecl
 
 bool ASTUnionDeclNew(struct ASTUnionDecl *self,struct Token ident,struct LinkedList properties);
 
+struct ASTImplDecl
+{
+	struct Token ident;
+	struct LinkedList methods;
+};
+
+
+bool ASTImplDeclNew(struct ASTImplDecl *self,struct Token ident,struct LinkedList methods);
+
 
 struct ASTSumNamedField
 {
@@ -239,6 +251,7 @@ struct ASTFunctionAttributes
     bool is_pub;
     bool is_static;
     bool is_naked;
+	bool is_constructor;
 
     bool is_foreign;
     struct String foreign_abi;   // "C", empty if not foreign
@@ -290,6 +303,7 @@ enum ASTStatementType
 	AST_STATEMENT_LOOP,
 	AST_STATEMENT_CONTINUE,
 	AST_STATEMENT_BREAK,
+	AST_STATEMENT_MATCH,
 	AST_STATEMENT_EXPRESSION,
 };
 
@@ -436,7 +450,49 @@ bool ASTReturnStmtNew(struct ASTReturnStmt *self,struct ASTExpression *expr);
 
 
 
+enum ASTPatternKind
+{
+    AST_PATTERN_LITERAL,
+    AST_PATTERN_IDENTIFIER,
+    AST_PATTERN_ENUM,
+    AST_PATTERN_SUM_SINGLE,
+    AST_PATTERN_SUM_TUPLE,
+    AST_PATTERN_SUM_STRUCT,
+    AST_PATTERN_STRUCT,
+    AST_PATTERN_TUPLE,
+    AST_PATTERN_WILDCARD
+};
 
+
+struct ASTPattern
+{
+    enum ASTPatternKind kind;
+    struct Token ident;
+    struct LinkedList bindings;
+};
+
+
+bool ASTPatternNew(struct ASTPattern *self,enum ASTPatternKind kind,struct Token ident,struct LinkedList bindings);
+
+
+struct ASTMatchArm
+{
+    struct ASTPattern *pattern;
+    struct ASTBlockStmt *stmt;
+};
+
+bool ASTMatchArmNew(struct ASTMatchArm *self,struct ASTPattern *pattern,struct ASTBlockStmt*stmt);
+
+
+
+struct ASTMatchStmt
+{
+    struct ASTExpression *expr;
+    struct LinkedList arms;
+};
+
+
+bool ASTMatchStmtNew(struct ASTMatchStmt *self,struct ASTExpression *expr,struct LinkedList arms);
 
 
 enum ASTExpressionType

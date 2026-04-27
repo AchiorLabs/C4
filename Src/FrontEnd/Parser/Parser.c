@@ -24,6 +24,7 @@ bool ParserNew(
 
 	ParserParseProgram(self);
 
+	puts("parsing done");
 	return true;
 }
 
@@ -862,7 +863,7 @@ struct ASTDeclaration *ParserParseDecl(
 		{
 			struct String tmp;
 			ast_type     = AST_DECLARATION_FUNCTION;
-			ast_decl_val = (void *)ParserParseFunctionDecl(self,false,false,false,false,tmp,false,tmp);
+			ast_decl_val = (void *)ParserParseFunctionDecl(self,false,true,false,false,tmp,false,tmp);
 			break;
 		}
 		case TOKEN_KEYWORD_FOREIGN:
@@ -883,6 +884,13 @@ struct ASTDeclaration *ParserParseDecl(
 			struct String tmp;
 			ast_type     = AST_DECLARATION_UNION;
 			ast_decl_val = (void *)ParserParseStructDecl(self);
+			break;
+		}
+		case TOKEN_KEYWORD_IMPL:
+		{
+			struct String tmp;
+			ast_type     = AST_DECLARATION_IMPL;
+			ast_decl_val = (void *)ParserParseImplDecl(self);
 			break;
 		}
 		case TOKEN_KEYWORD_SUM:
@@ -1006,6 +1014,186 @@ struct ASTStructProperty *ParserParseStructProperty(struct Parser *self)
 
 
 
+struct ASTImplDecl *ParserParseImplDecl(struct Parser *self)
+{
+	if( ACHIOR_LABS_NULL(self))
+	{
+		return NULL;
+	}
+	
+	// consume struct keyword
+	ParserExpectKeyword(self,"impl","expected impl keyword");
+	ACHIOR_LABS_SYNCHRONIZE(true);
+
+	struct Token ident;
+
+	// check if we have a struct name,raise and error if not
+	if( ParserIsIdentifier(self))
+	{
+		ident = ParserConsume(self);
+	}
+	else
+	{
+		ParserFatal(self,"expected an identifier after impl");
+		ACHIOR_LABS_SYNCHRONIZE(true);
+	}
+
+	// consume the :
+	ParserExpectSymbol(self,":","expected :");
+	ACHIOR_LABS_SYNCHRONIZE(true);
+
+	struct LinkedList methods;
+	LinkedListNew(&methods,self->bump);
+	
+
+	while( !ParserIsToken(self,")",0))
+	{
+		struct String tmp;
+		struct ASTFunctionDecl *method = ParserParseImplMethod(self,ident,false,true,false,false,tmp,false,tmp);
+		if( ACHIOR_LABS_NULL(method))
+		{
+			continue;
+		}
+
+		LinkedListPushBack(&methods,method);
+		if( ParserIsSymbol(self,":",0))
+		{
+			break;
+		}
+	}
+
+	ParserExpectSymbol(self,":","expected )");
+	ACHIOR_LABS_SYNCHRONIZE(true);
+
+	struct ASTImplDecl *decl = ParserMakeImplDecl(self,ident,methods);
+	return decl;
+}
+
+
+
+
+
+struct ASTFunctionDecl *ParserParseImplMethod(struct Parser *self,struct Token structIdent,bool is_pub,bool is_static,bool is_naked,bool is_foreign,struct String foreign_abi,bool has_link_name,struct String link_name)
+{
+	if( ACHIOR_LABS_NULL(self))
+	{
+		return NULL;
+	}
+
+
+	if(ACHIOR_LABS_TRUE(is_pub) && ACHIOR_LABS_TRUE(is_foreign))
+	{
+		ParserFatal(self,"function cannot be both foreign and public");
+		ACHIOR_LABS_SYNCHRONIZE(true);
+	}
+
+	// consume fn keyword
+	ParserExpectKeyword(self,"fn","expected fn");
+	ACHIOR_LABS_SYNCHRONIZE(true);
+
+	struct Token ident;
+
+	// check if we have a function name,raise and error if not
+	if( ParserIsIdentifier(self))
+	{
+		ident = ParserConsume(self);
+	}
+	else
+	{
+		ParserFatal(self,"expected an identifier after fn");
+		ACHIOR_LABS_SYNCHRONIZE(true);
+	}
+
+	struct String name;
+	StringNew(&name,10,self->bump);
+	StringPushBack(&name,ident.value.data);
+	ident.value.size = 0;
+	StringPushBack(&ident.value,"__C4C");
+	StringPushBack(&ident.value,structIdent.value.data);
+	StringPushBack(&ident.value,name.data);
+
+
+	// consume the open paren
+	ParserExpectSymbol(self,"(","expected (");
+	ACHIOR_LABS_SYNCHRONIZE(true);
+
+	struct LinkedList arguments;
+	LinkedListNew(&arguments,self->bump);
+
+	struct String tmp;
+	StringNew(&tmp,10,self->bump);
+	StringPushBack(&tmp,"self");
+	struct Token selfIdent               = (struct Token){.type = TOKEN_IDENT,.value = tmp};
+	struct ASTType *astType              = ParserMakeType(self,AST_DATA_TYPE_AGGREGATE,ParserMakeAggregateType(self,structIdent));
+	struct ASTPointerType *pointerType   = ParserMakePointerType(self,astType);
+	astType                              = ParserMakeType(self,AST_DATA_TYPE_POINTER,pointerType);
+	struct ASTFunctionArgument *argument = ParserMakeFunctionArgument(self,astType,selfIdent);
+	LinkedListPushBack(&arguments,argument);
+
+	while( !ParserIsToken(self,")",0))
+	{
+		argument = ParserParseFunctionArgument(self);
+		if( ACHIOR_LABS_NULL(argument))
+		{
+			continue;
+		}
+
+		LinkedListPushBack(&arguments,argument);
+		if( ParserIsSymbol(self,")",0))
+		{
+			break;
+		}
+
+		ParserExpectSymbol(self,",","expected , in fn argument");
+		ACHIOR_LABS_SYNCHRONIZE(true);
+	}
+
+	ParserExpectSymbol(self,")","expected )");
+	ACHIOR_LABS_SYNCHRONIZE(true);
+
+	struct ASTType *return_type;
+
+	if(ParserIsToken(self,"->",0))
+	{
+		ParserExpectSymbol(self,"->","expected ->");
+		ACHIOR_LABS_SYNCHRONIZE(true);
+		return_type = ParserParseType(self);
+	}
+	else
+	{
+		return_type = ParserMakeType(self,AST_DATA_TYPE_VOID,NULL);
+	}
+	
+
+	struct ASTBlockStmt *block = NULL;
+
+	if(ACHIOR_LABS_FALSE(is_foreign))
+	{
+
+		if( ParserIsSymbol(self,":",0))
+		{
+			block = ParserParseBlockStmt(self);
+		}
+		else
+		{
+			ParserFatal(self,"error : function lacks a valid block");
+			ACHIOR_LABS_SYNCHRONIZE(true);
+		}
+	}
+
+
+	struct ASTFunctionAttributes *attributes = ParserMakeFunctionAttributes(self,is_pub,is_static,is_naked,is_foreign,foreign_abi,has_link_name,link_name);
+	
+	struct ASTFunctionDecl *ast_fn = ParserMakeFunctionDecl(self,return_type,ident,arguments,block,attributes);
+	return ast_fn;
+}
+
+
+
+
+
+
+
 
 struct ASTSumDecl *ParserParseSumDecl(struct Parser *self)
 {
@@ -1041,7 +1229,6 @@ struct ASTSumDecl *ParserParseSumDecl(struct Parser *self)
 
 	while( !ParserIsToken(self,":",0))
 	{
-		puts("hmm");
 		struct ASTSumVariant *variant = ParserParseSumVariant(self);
 		if( ACHIOR_LABS_NULL(variant))
 		{
@@ -1096,7 +1283,7 @@ struct ASTSumVariant *ParserParseSumVariant(struct Parser *self)
 		// consume the (
 		ParserExpectSymbol(self,"(","expected (");
 
-		kind = AST_SUM_VARIANT_UNIT;
+		
 
 		struct ASTType *type = ParserParseType(self);
 		if( ACHIOR_LABS_NULL(type))
@@ -1104,7 +1291,38 @@ struct ASTSumVariant *ParserParseSumVariant(struct Parser *self)
 			ACHIOR_LABS_PRINT("null argument type");
 		}
 
-		LinkedListPushBack(&fields,type);
+
+		if(ParserIsSymbol(self,")",0))
+		{
+			LinkedListPushBack(&fields,type);
+			kind = AST_SUM_VARIANT_UNIT;
+		}
+		else
+		{
+			kind = AST_SUM_VARIANT_TUPLE;
+			
+			while(true)
+			{
+				LinkedListPushBack(&fields,type);
+
+				if(ParserIsSymbol(self,")",0))
+				{
+					break;
+				}
+				else
+				{
+					ParserExpectSymbol(self,",","expected a ,after sum tuple field value");
+				}
+
+				type = ParserParseType(self);
+				if( ACHIOR_LABS_NULL(type))
+				{
+					ACHIOR_LABS_PRINT("null argument type");
+				}
+			}
+		}
+
+		
 
 		// consume the )
 		ParserExpectSymbol(self,")","expected )");
@@ -1191,13 +1409,13 @@ struct ASTFunctionDecl *ParserParseFunctionDecl(struct Parser *self,bool is_pub,
 
 	while( !ParserIsToken(self,")",0))
 	{
-		struct ASTFunctionArgument *ast_fn_arg = ParserParseFunctionArgument(self);
-		if( ACHIOR_LABS_NULL(ast_fn_arg))
+		struct ASTFunctionArgument *argument = ParserParseFunctionArgument(self);
+		if( ACHIOR_LABS_NULL(argument))
 		{
 			continue;
 		}
 
-		LinkedListPushBack(&arguments,ast_fn_arg);
+		LinkedListPushBack(&arguments,argument);
 		if( ParserIsSymbol(self,")",0))
 		{
 			break;
@@ -1276,8 +1494,8 @@ struct ASTFunctionArgument *ParserParseFunctionArgument(struct Parser *self)
 		ACHIOR_LABS_SYNCHRONIZE(true);
 	}
 
-	struct ASTFunctionArgument *ast_fn_arg = ParserMakeFunctionArgument(self,ast_type,ident);
-	return ast_fn_arg;
+	struct ASTFunctionArgument *argument = ParserMakeFunctionArgument(self,ast_type,ident);
+	return argument;
 
 }
 
@@ -1518,6 +1736,12 @@ struct ASTStatement *ParserParseStmt(struct Parser *self)
 			astStmt_val = (void *)ParserParseBreakStmt(self);
 			break;
 		}
+		case TOKEN_KEYWORD_MATCH:
+		{
+			ast_type     = AST_STATEMENT_MATCH;
+			astStmt_val = (void *)ParserParseMatchStmt(self);
+			break;
+		}
 		default:
 		{
 			if( ParserIsType(self) || ParserParseTryVariableDecl(self) )
@@ -1544,6 +1768,45 @@ struct ASTStatement *ParserParseStmt(struct Parser *self)
 
 	struct ASTStatement *astStmt = ParserMakeStatement(self,ast_type,astStmt_val);
 	return astStmt;
+}
+
+
+
+
+struct ASTMatchStmt *ParserParseMatchStmt(struct Parser *self)
+{
+	if( ACHIOR_LABS_NULL(self))
+	{
+		return NULL;
+	}
+	
+
+	ParserExpectKeyword(self,"match","expected match ");
+	ACHIOR_LABS_SYNCHRONIZE(false);
+
+	struct ASTExpression *expr = ParserParseExpr(self,0);
+
+	ParserExpectSymbol(self,":","expected a : ");
+	ACHIOR_LABS_SYNCHRONIZE(false);
+
+
+	struct LinkedList stmts;
+	LinkedListNew(&stmts,self->bump);
+
+
+	while(true)
+	{
+		if( ParserIsSymbol(self,":",0) || ParserAtEnd(self))
+		{
+			break;
+		}
+
+		//LinkedListPushBack(&stmts,stmt);
+	}
+
+
+	//struct ASTMatchStmt *astStmt = ParserMakeMatchStmt(self);
+	return NULL;//astStmt;
 }
 
 
@@ -2562,6 +2825,17 @@ struct ASTStructProperty *ParserMakeStructProperty(struct Parser *self,struct AS
     return node;
 }
 
+
+
+
+
+struct ASTImplDecl *ParserMakeImplDecl(struct Parser *self,struct Token ident,struct LinkedList methods)
+{
+    struct ASTImplDecl *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTImplDecl,1);
+
+    ASTImplDeclNew(node,ident,methods);
+    return node;
+}
 
 
 struct ASTSumDecl *ParserMakeSumDecl(struct Parser *self,struct Token ident,struct LinkedList variants)

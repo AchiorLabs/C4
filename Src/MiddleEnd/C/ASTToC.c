@@ -51,6 +51,9 @@ void ASTToCDecl(struct ASTToC *self,struct ASTDeclaration *decl)
         return;
     }
 
+    
+
+    //exit(9);
 	switch(decl->type)
 	{
 		case AST_DECLARATION_STRUCT:
@@ -61,6 +64,11 @@ void ASTToCDecl(struct ASTToC *self,struct ASTDeclaration *decl)
 		case AST_DECLARATION_UNION:
 		{
 			ASTToCUnionDecl(self,decl->decl);
+			break;
+		}
+		case AST_DECLARATION_IMPL:
+		{
+			ASTToCImplDecl(self,decl->decl);
 			break;
 		}
 		case AST_DECLARATION_SUM:
@@ -135,6 +143,25 @@ void ASTToCUnionDecl(struct ASTToC *self,struct ASTUnionDecl *decl)
 
     ACHIOR_LABS_FPRINTF(self->fileHandle,"\n};\n");
 
+}
+
+
+
+void ASTToCImplDecl(struct ASTToC *self,struct ASTImplDecl *decl)
+{
+    if( ACHIOR_LABS_NULL(decl))
+    {
+        return;
+    }
+
+    
+    for(u64 i = 0; i < decl->methods.len; i++)
+    {
+        ACHIOR_LABS_FPRINTF(self->fileHandle,"\n");
+        struct ASTFunctionDecl *method = LinkedListAt(&decl->methods,i);
+        ASTToCFunctionDecl(self,method);
+        ACHIOR_LABS_FPRINTF(self->fileHandle,"\n");
+    }
 }
 
 
@@ -246,7 +273,7 @@ void ASTToCSumVariants(struct ASTToC *self,struct LinkedList variants)
             }
             case AST_SUM_VARIANT_TUPLE:
             {
-                ACHIOR_LABS_FPRINTF(self->fileHandle,"\n\t\tstruct\n{");
+                ACHIOR_LABS_FPRINTF(self->fileHandle,"\n\n\t\tstruct\n\t\t{");
                 for(u64 i = 0; i < variant->fields.len; i++)
                 {
                     struct ASTType *type = LinkedListAt(&variant->fields,i);
@@ -257,7 +284,7 @@ void ASTToCSumVariants(struct ASTToC *self,struct LinkedList variants)
                     ACHIOR_LABS_FPRINTF(self->fileHandle," field%lu;",i);
                 }
 
-                ACHIOR_LABS_FPRINTF(self->fileHandle,"\t\t\n}%s;",variant->ident.value.data);
+                ACHIOR_LABS_FPRINTF(self->fileHandle,"\t\t\n\t\t}%s;",variant->ident.value.data);
                 break;
             }
             case AST_SUM_VARIANT_STRUCT:
@@ -274,20 +301,25 @@ void ASTToCSumVariants(struct ASTToC *self,struct LinkedList variants)
 
 
 
-void ASTToCFunctionDecl(struct ASTToC *self,struct ASTFunctionDecl *function)
+void ASTToCFunctionDecl(struct ASTToC *self,struct ASTFunctionDecl *decl)
 {
-    if( ACHIOR_LABS_NULL(function))
+    if( ACHIOR_LABS_NULL(decl))
     {
         return;
     }
 
+    
+    if(ACHIOR_LABS_TRUE(decl->attributes->is_static))
+    {
+        ACHIOR_LABS_FPRINTF(self->fileHandle,"static ");
+    }
 	
     struct LinkedList arrayBuffer;
     LinkedListNew(&arrayBuffer,self->bump);
 
-    ASTToCType(self,function->returnType,&arrayBuffer);
+    ASTToCType(self,decl->returnType,&arrayBuffer);
     ACHIOR_LABS_FPRINTF(self->fileHandle," ");
-    ASTToCIdentifier(self,function->ident);
+    ASTToCIdentifier(self,decl->ident);
 
     for(u64 i = 0; i < arrayBuffer.len; i++)
     {
@@ -300,14 +332,19 @@ void ASTToCFunctionDecl(struct ASTToC *self,struct ASTFunctionDecl *function)
 
     ACHIOR_LABS_FPRINTF(self->fileHandle,"(");
 
-    for(u64 i = 0; i < function->arguments.len; i++)
+    for(u64 i = 0; i < decl->arguments.len; i++)
     {
-        ASTToCFunctionArgument(self,LinkedListAt(&function->arguments,i));
+        ASTToCFunctionArgument(self,LinkedListAt(&decl->arguments,i));
+
+        if(ACHIOR_LABS_LESS(i,decl->arguments.len - 1))
+        {
+            ACHIOR_LABS_FPRINTF(self->fileHandle,",");
+        }
     }
 
     ACHIOR_LABS_FPRINTF(self->fileHandle,")");
 
-    ASTToCBlockStmt(self,function->block,"");
+    ASTToCBlockStmt(self,decl->block,"");
 }
 
 
@@ -350,13 +387,53 @@ void ASTToCType(struct ASTToC *self,struct ASTType *type,struct LinkedList *arra
 
     switch(type->dataType)
     {
+        case AST_DATA_TYPE_VOID:
+        {
+            ACHIOR_LABS_FPRINTF(self->fileHandle,"void ");
+            break;
+        }
+        case AST_DATA_TYPE_I8:
+        {
+            ACHIOR_LABS_FPRINTF(self->fileHandle,"i8 ");
+            break;
+        }
+        case AST_DATA_TYPE_I16:
+        {
+            ACHIOR_LABS_FPRINTF(self->fileHandle,"i16 ");
+            break;
+        }
         case AST_DATA_TYPE_I32:
         {
             ACHIOR_LABS_FPRINTF(self->fileHandle,"i32 ");
             break;
         }
-        case AST_DATA_TYPE_POINTER:
+        case AST_DATA_TYPE_I64:
         {
+            ACHIOR_LABS_FPRINTF(self->fileHandle,"i64 ");
+            break;
+        }
+        case AST_DATA_TYPE_U8:
+        {
+            ACHIOR_LABS_FPRINTF(self->fileHandle,"u8 ");
+            break;
+        }
+        case AST_DATA_TYPE_U16:
+        {
+            ACHIOR_LABS_FPRINTF(self->fileHandle,"u16 ");
+            break;
+        }
+        case AST_DATA_TYPE_U32:
+        {
+            ACHIOR_LABS_FPRINTF(self->fileHandle,"u32 ");
+            break;
+        }
+        case AST_DATA_TYPE_U64:
+        {
+            ACHIOR_LABS_FPRINTF(self->fileHandle,"u64 ");
+            break;
+        }
+        case AST_DATA_TYPE_POINTER:
+        {puts("ai");
             struct ASTPointerType *ptrType = (struct ASTPointerType *)type->type;
             ASTToCType(self,ptrType->type,arrayBuffer);
             ACHIOR_LABS_FPRINTF(self->fileHandle,"*");
@@ -367,6 +444,15 @@ void ASTToCType(struct ASTToC *self,struct ASTType *type,struct LinkedList *arra
             struct ASTArrayType *arrayType = (struct ASTArrayType *)type->type;
             LinkedListPushBack(arrayBuffer,arrayType->size);
             ASTToCType(self,arrayType->type,arrayBuffer);
+            break;
+        }
+        case AST_DATA_TYPE_AGGREGATE:
+        case AST_DATA_TYPE_STRUCT:
+        {
+            struct ASTStructType *structType = (struct ASTStructType *)type->type;
+            ACHIOR_LABS_FPRINTF(self->fileHandle,"struct ");
+            ASTToCIdentifier(self,structType->ident);
+            ACHIOR_LABS_FPRINTF(self->fileHandle," ");
             break;
         }
         default:
@@ -946,6 +1032,11 @@ void ASTToCFunctionCallExpr(struct ASTToC *self,void *expr)
     {
         struct ASTExpression *argument = LinkedListAt(&function->arguments,i);
         ASTToCExpression(self,argument);
+
+        if(ACHIOR_LABS_LESS(i,function->arguments.len - 1))
+        {
+            ACHIOR_LABS_FPRINTF(self->fileHandle,",");
+        }
     }
 
     ACHIOR_LABS_FPRINTF(self->fileHandle,")");

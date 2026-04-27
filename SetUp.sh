@@ -6,7 +6,7 @@ set -e
 
 
 
-mkdir -p bin
+mkdir -p Target
 mkdir -p Objects
 mkdir -p Objects/FrontEnd/Lexer
 mkdir -p Objects/FrontEnd/AST
@@ -27,14 +27,14 @@ mkdir -p Objects/MiddleEnd/C
 mkdir -p Objects/MiddleEnd/Driver
 
 sudo mkdir -p /usr/include/AchiorLabs/C4
-sudo cp Support/Include/Types.h /usr/include/AchiorLabs/C4/Types.h
+sudo cp Src/Support/Include/Types.h /usr/include/AchiorLabs/C4/Types.h
 
-exit 0
+#exit 0
 
-mkdir -p Objects/MiddleEnd/c4il
-mkdir -p Objects/MiddleEnd/optimization
+#mkdir -p Objects/MiddleEnd/c4il
+#mkdir -p Objects/MiddleEnd/optimization
+#mkdir -p Objects/backend/x86_64
 
-mkdir -p Objects/backend/x86_64
 
 if [ -f /etc/os-release ]; then
 	. /etc/os-release
@@ -42,7 +42,6 @@ if [ -f /etc/os-release ]; then
 else
 	echo "[-] cannot detect distro information !! please install the reqired packages manually"
 	echo "required packages are gcc and nasm and their dependencies"
-
 fi
 
 echo "[+] Detected distro : $DISTRO"
@@ -86,3 +85,7 @@ case "$DISTRO" in
 esac
 echo "[+] Installlation complete!!"
 echo "Have fun using c4 :)"
+
+exit 0
+bash DevTools/ResetSyntaxHighlighting.sh
+bash DevTools/SetSyntaxHighlighting.sh
