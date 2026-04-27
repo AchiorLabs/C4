@@ -46,6 +46,12 @@
 #endif
 
 
+#ifndef ACHIOR_LABS_STRCHR
+#define ACHIOR_LABS_STRCHR strchr
+#endif
+
+
+
 #ifndef ACHIOR_LABS_STRRCHR
 #define ACHIOR_LABS_STRRCHR strrchr
 #endif

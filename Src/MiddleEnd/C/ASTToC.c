@@ -246,7 +246,7 @@ void ASTToCSumVariants(struct ASTToC *self,struct LinkedList variants)
             }
             case AST_SUM_VARIANT_TUPLE:
             {
-                ACHIOR_LABS_FPRINTF(self->fileHandle,"\n\t\tstruct\n{");
+                ACHIOR_LABS_FPRINTF(self->fileHandle,"\n\n\t\tstruct\n\t\t{");
                 for(u64 i = 0; i < variant->fields.len; i++)
                 {
                     struct ASTType *type = LinkedListAt(&variant->fields,i);
@@ -257,7 +257,7 @@ void ASTToCSumVariants(struct ASTToC *self,struct LinkedList variants)
                     ACHIOR_LABS_FPRINTF(self->fileHandle," field%lu;",i);
                 }
 
-                ACHIOR_LABS_FPRINTF(self->fileHandle,"\t\t\n}%s;",variant->ident.value.data);
+                ACHIOR_LABS_FPRINTF(self->fileHandle,"\t\t\n\t\t}%s;",variant->ident.value.data);
                 break;
             }
             case AST_SUM_VARIANT_STRUCT:
@@ -274,20 +274,25 @@ void ASTToCSumVariants(struct ASTToC *self,struct LinkedList variants)
 
 
 
-void ASTToCFunctionDecl(struct ASTToC *self,struct ASTFunctionDecl *function)
+void ASTToCFunctionDecl(struct ASTToC *self,struct ASTFunctionDecl *decl)
 {
-    if( ACHIOR_LABS_NULL(function))
+    if( ACHIOR_LABS_NULL(decl))
     {
         return;
     }
 
+    
+    if(ACHIOR_LABS_TRUE(decl->attributes->is_static))
+    {
+        ACHIOR_LABS_FPRINTF(self->fileHandle,"static ");
+    }
 	
     struct LinkedList arrayBuffer;
     LinkedListNew(&arrayBuffer,self->bump);
 
-    ASTToCType(self,function->returnType,&arrayBuffer);
+    ASTToCType(self,decl->returnType,&arrayBuffer);
     ACHIOR_LABS_FPRINTF(self->fileHandle," ");
-    ASTToCIdentifier(self,function->ident);
+    ASTToCIdentifier(self,decl->ident);
 
     for(u64 i = 0; i < arrayBuffer.len; i++)
     {
@@ -300,14 +305,14 @@ void ASTToCFunctionDecl(struct ASTToC *self,struct ASTFunctionDecl *function)
 
     ACHIOR_LABS_FPRINTF(self->fileHandle,"(");
 
-    for(u64 i = 0; i < function->arguments.len; i++)
+    for(u64 i = 0; i < decl->arguments.len; i++)
     {
-        ASTToCFunctionArgument(self,LinkedListAt(&function->arguments,i));
+        ASTToCFunctionArgument(self,LinkedListAt(&decl->arguments,i));
     }
 
     ACHIOR_LABS_FPRINTF(self->fileHandle,")");
 
-    ASTToCBlockStmt(self,function->block,"");
+    ASTToCBlockStmt(self,decl->block,"");
 }
 
 
@@ -350,9 +355,44 @@ void ASTToCType(struct ASTToC *self,struct ASTType *type,struct LinkedList *arra
 
     switch(type->dataType)
     {
+        case AST_DATA_TYPE_I8:
+        {
+            ACHIOR_LABS_FPRINTF(self->fileHandle,"i8 ");
+            break;
+        }
+        case AST_DATA_TYPE_I16:
+        {
+            ACHIOR_LABS_FPRINTF(self->fileHandle,"i16 ");
+            break;
+        }
         case AST_DATA_TYPE_I32:
         {
             ACHIOR_LABS_FPRINTF(self->fileHandle,"i32 ");
+            break;
+        }
+        case AST_DATA_TYPE_I64:
+        {
+            ACHIOR_LABS_FPRINTF(self->fileHandle,"i64 ");
+            break;
+        }
+        case AST_DATA_TYPE_U8:
+        {
+            ACHIOR_LABS_FPRINTF(self->fileHandle,"u8 ");
+            break;
+        }
+        case AST_DATA_TYPE_U16:
+        {
+            ACHIOR_LABS_FPRINTF(self->fileHandle,"u16 ");
+            break;
+        }
+        case AST_DATA_TYPE_U32:
+        {
+            ACHIOR_LABS_FPRINTF(self->fileHandle,"u32 ");
+            break;
+        }
+        case AST_DATA_TYPE_U64:
+        {
+            ACHIOR_LABS_FPRINTF(self->fileHandle,"u64 ");
             break;
         }
         case AST_DATA_TYPE_POINTER:

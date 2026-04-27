@@ -30,12 +30,13 @@ enum C4CTargetOS
     C4C_TARGET_OS_BAREMETAL,
 };
 
-enum C4CAssemblySyntax
+enum C4CTargetAssembler
 {
-    C4C_ASM_SYNTAX_NONE,
-    C4C_ASM_SYNTAX_NASM,
-    C4C_ASM_SYNTAX_GAS,
-    C4C_ASM_SYNTAX_MASM,
+    C4C_TARGET_ASSEMBLER_NONE,
+    C4C_TARGET_ASSEMBLER_NASM,
+    C4C_TARGET_ASSEMBLER_GAS,
+    C4C_TARGET_ASSEMBLER_MASM,
+    C4C_TARGET_ASSEMBLER_GNUC,
 };
 
 
@@ -45,11 +46,11 @@ struct C4CTarget
 {
     enum C4CTargetArchitecture arch;
     enum C4CTargetOS os;
-    enum C4CAssemblySyntax asm_syntax;
+    enum C4CTargetAssembler assembler;
 };
 
 
-bool C4CTargetNew(struct C4CTarget *self,enum C4CTargetArchitecture arch,enum C4CTargetOS os,enum C4CAssemblySyntax asm_syntax);
+bool C4CTargetNew(struct C4CTarget *self,enum C4CTargetArchitecture arch,enum C4CTargetOS os,enum C4CTargetAssembler assembler);
 
 
 

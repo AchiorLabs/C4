@@ -14,6 +14,7 @@ bool DriverRun(struct C4CCompiler *c4c)
 	struct ASTProgram *program = parser.astProgram;
 	MiddleEndDriverRun(&c4c->options.middleend,program,c4c->bump);
 
+
 	return true;
 }
 
