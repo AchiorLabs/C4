@@ -202,13 +202,13 @@ static u64 XXH64(const void *input, u64 len, u64 seed)
 
 /**
  * This function initializes the hashmap
- * It takes one parametere:
+ * It takes 3 parameters:
  * 
- * - capacity -> the number of buckets to be created
+ * - self       -> the memory address of the hashmap
+ * - bump       -> the bump allocator
+ * - capacity   -> the number of buckets to be created
  * 
- * Notice that we use calloc, because we want the bucket to be zerod out
- * so that setting a key at an index found by the hashing algo works well
- * 
+ * If the function always returns true
  */
 bool HashMapNew(struct HashMap *self,u64 capacity,struct BumpAllocator *bump)
 {
@@ -226,10 +226,10 @@ bool HashMapNew(struct HashMap *self,u64 capacity,struct BumpAllocator *bump)
 /**
  * This function inserts a key and value to the hash map
  * It takes four parameters:
- * - map -> a pointer to the map that is being inserted to
- * - key -> the key
- * - len -> the length of the key, we require this for dynamic memory allocation
- * - value -> This is the value of the item being saved in key
+ * - sef    -> a pointer to the map that is being inserted to
+ * - key    -> the key
+ * - len    -> the length of the key, we require this for dynamic memory allocation
+ * - value  -> This is the value of the item being saved in key
  * 
  * Notice that we use void for generics, 
  */
@@ -268,9 +268,9 @@ bool HashMapAdd(struct HashMap *self,const void *key,u64 len,void *value)
 /**
  * This function returns the value of a given key.
  * It takes three parameters:
- * - map -> the map to search the key from
- * - key -> the key to search for
- * - len -> the length of the key
+ * - self -> the map to search the key from
+ * - key  -> the key to search for
+ * - len  -> the length of the key
  * 
  * we need the length of the key to check against the length store in the 
  * node i.e node->len,
@@ -299,4 +299,55 @@ void *HashMapGet(struct HashMap *self,const void *key,u64 len)
     }
 
     return NULL;
+}
+
+
+/**
+ * This function returns a copy of a given hashmap.
+ * It takes one parameter:
+ * - self -> the map to search the key from
+ * 
+ * it perforns a deep copy of the self hashmap and return a 
+ * copy of it.
+ * This function does not perform a deep clean on node creation failure, beware 
+ * 
+ */
+struct HashMap *HashMapCopy(struct HashMap *self)
+{
+    if(ACHIOR_LABS_NULL(self))
+    {
+        return NULL;
+    }
+
+    size_t sizeOfHashMap            = ACHIOR_LABS_SIZEOF(struct HashMap);
+    struct HashMap hashMapCopy;     
+    bool created                    = HashMapNew(&hashMapCopy, self->capacity,self->bump);
+
+
+    if(! created)
+    {
+        return NULL;
+    }
+
+
+
+    for(u64 i = 0; i < self->capacity; i++) 
+    {
+        struct HashNode *node       = self->buckets[i];
+
+        while(node)
+        {
+            bool nodeCopied         = HashMapAdd(&hashMapCopy,node->key,node->keyLength, node->value);
+
+            if(! nodeCopied)
+            {
+                //should do a total clean up, 
+                ACHIOR_LABS_FREE(&hashMapCopy);
+            }
+            node                    = node->next;
+        }
+    }
+
+
+    return &hashMapCopy;
 }
