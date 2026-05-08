@@ -91,6 +91,11 @@ $(OBJ)/MiddleEnd/C/ASTToC.obj: $(SRC)/MiddleEnd/C/ASTToC.c
 $(OBJ)/MiddleEnd/Driver/Driver.obj: $(SRC)/MiddleEnd/Driver/Driver.c
 	$(CC) $(CFLAGS) $< $(OUTOBJ)$@
 
-=
+
 $(OBJ)/Driver/Driver.obj: $(SRC)/Driver/Driver.c
 	$(CC) $(CFLAGS) $< $(OUTOBJ)$@
+
+clean:
+	if exist $(OBJ) rmdir /s /q $(OBJ)
+	if exist $(TARGET)\Main del /q $(TARGET)\Main
+	powershell -ExecutionPolicy Bypass -File SetUp.ps1
