@@ -87,5 +87,6 @@ echo "[+] Installlation complete!!"
 echo "Have fun using c4 :)"
 
 exit 0
-bash DevTools/ResetSyntaxHighlighting.sh
+# bash DevTools/ResetSyntaxHighlighting.sh // Having this here causes vim to reset its entire syntax meaning after setting for C4 it only starts highlighing for c4 and not any other language
+
 bash DevTools/SetSyntaxHighlighting.sh
