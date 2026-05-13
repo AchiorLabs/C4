@@ -45,6 +45,81 @@ bool IdentifierResolutionNew(struct IdentifierResolution *self,struct ASTProgram
 }
 
 
+
+
+struct HashMap IdentifierResolutionCopyIdentMap(struct IdentifierResolution *self,struct HashMap *identMap)
+{
+    if( ACHIOR_LABS_NULL(self) || ACHIOR_LABS_NULL(identMap))
+    {
+        (struct HashMap){};
+    }
+
+    struct HashMap newIdentMap;
+    HashMapNew(&newIdentMap,identMap->capacity,self->bump);
+
+    for(u64 i = 0; i < identMap->capacity; i++)
+    {
+        i32 j                         = 0;
+        struct HashNode *previousNode = NULL;
+
+        for (struct HashNode *node = identMap->buckets[i]; ACHIOR_LABS_NOT_NULL(node); node = node->next)
+        {
+            struct HashNode *newNode = (struct HashNode *)ACHIOR_LABS_ARENA_ALLOC(self->bump,struct HashNode,1);
+
+            if(ACHIOR_LABS_NULL(newNode))
+            {
+                continue;
+            }
+
+            newNode->hash = node->hash;
+            newNode->key  = ACHIOR_LABS_ARENA_ALLOC(self->bump,char,node->keyLength);
+
+            if(ACHIOR_LABS_NULL(newNode->key))
+            {
+                continue;
+            }
+
+            newNode->keyLength = node->keyLength;
+            ACHIOR_LABS_MEMCPY(newNode->key,node->key,node->keyLength);
+
+            struct IdentifierEntry *entry    = (struct IdentifierEntry *)node->value;
+            struct IdentifierEntry *newEntry = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct IdentifierEntry,1);
+            
+            struct String newIdent;
+            StringNew(&newIdent,entry->ident.capacity,self->bump);
+            StringPushBack(&newIdent,entry->ident.data);
+
+            IdentifierEntryNew(newEntry,entry->hasLinkage,false,entry->aggregateKind,newIdent);
+            
+
+
+            newNode->value = newEntry;
+            newNode->next  = NULL;
+
+            if(ACHIOR_LABS_NOT_NULL(previousNode))
+            {
+                previousNode->next = newNode;
+            }
+
+            previousNode   = newNode; 
+
+            if(ACHIOR_LABS_ZERO(j))
+            {
+                newIdentMap.buckets[i] = newNode;
+            }
+
+            newIdentMap.size++;
+            j++;
+
+        }
+    }
+    
+    return newIdentMap;
+}
+
+
+
+
 void IdentifierResolutionProgram(struct IdentifierResolution *self,struct ASTProgram *program,struct HashMap *identMap)
 {
     if( ACHIOR_LABS_NULL(program))
@@ -127,7 +202,7 @@ void IdentifierResolutionStructDecl(struct IdentifierResolution *self,struct AST
     entry = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct IdentifierEntry,1);
     IdentifierEntryNew(entry,true,true,IDENTIFIER_AGGREGATE_STRUCT,decl->ident.value);
     
-    HashMapGet(&self->structMap,structIdent,structIdentLength);
+    HashMapAdd(&self->structMap,structIdent,structIdentLength,entry);
 }
 
 
@@ -267,7 +342,7 @@ void IdentifierResolutionSumVariants(struct IdentifierResolution *self,struct Li
 
 
 void IdentifierResolutionImplDecl(struct IdentifierResolution *self,struct ASTImplDecl *decl,struct HashMap *identMap)
-{puts("hmm$");
+{
     if( ACHIOR_LABS_NULL(decl))
     {
         return;
@@ -282,6 +357,49 @@ void IdentifierResolutionImplDecl(struct IdentifierResolution *self,struct ASTIm
 }
 
 
+
+void IdentifierResolutionType(struct IdentifierResolution *self,struct ASTType *type)
+{
+    if( ACHIOR_LABS_NULL(type))
+    {
+        return;
+    }
+
+    switch(type->dataType)
+    {
+        case AST_DATA_TYPE_AGGREGATE:
+        {
+            struct ASTAggregateType *aggregateType = (struct ASTAggregateType *)type->type;
+            char *ident                            = aggregateType->ident.value.data;
+            u64 identLength                        = ACHIOR_LABS_STRLEN(ident);
+            struct IdentifierEntry *entry          = HashMapGet(&self->structMap,ident,identLength);
+
+            if(ACHIOR_LABS_NULL(entry))
+            {
+                puts("unknown aggregate type encountered");
+                return;
+            }
+
+            if(ACHIOR_LABS_EQUAL(entry->aggregateKind,IDENTIFIER_AGGREGATE_STRUCT))
+            {
+                type->dataType = AST_DATA_TYPE_STRUCT;
+            }
+            else if(ACHIOR_LABS_EQUAL(entry->aggregateKind,IDENTIFIER_AGGREGATE_UNION))
+            {
+                type->dataType = AST_DATA_TYPE_UNION;
+            }
+            break;
+        }
+        case AST_DATA_TYPE_POINTER:
+        {
+            struct ASTPointerType *pointerType = (struct ASTPointerType *)type->type;
+            IdentifierResolutionType(self,pointerType->type);
+            break;
+        }
+    }
+}
+
+
 void IdentifierResolutionFunctionDecl(struct IdentifierResolution *self,struct ASTFunctionDecl *decl,struct HashMap *identMap)
 {
     if( ACHIOR_LABS_NULL(decl))
@@ -289,27 +407,7 @@ void IdentifierResolutionFunctionDecl(struct IdentifierResolution *self,struct A
         return;
     }
 
-    if(ACHIOR_LABS_EQUAL(decl->returnType->dataType,AST_DATA_TYPE_AGGREGATE))
-    {
-        struct ASTAggregateType *type = (struct ASTAggregateType *)decl->returnType->type;
-        char *ident                   = type->ident.value.data;
-        u64 identLength               = ACHIOR_LABS_STRLEN(ident);
-        struct IdentifierEntry *entry = HashMapGet(&self->structMap,ident,identLength);
-
-        if(ACHIOR_LABS_NULL(entry))
-        {
-            puts("unknown aggregate type encountered");
-        }
-
-        if(ACHIOR_LABS_EQUAL(entry->aggregateKind,IDENTIFIER_AGGREGATE_STRUCT))
-        {
-            decl->returnType->dataType = AST_DATA_TYPE_STRUCT;
-        }
-        else if(ACHIOR_LABS_EQUAL(entry->aggregateKind,IDENTIFIER_AGGREGATE_STRUCT))
-        {
-            decl->returnType->dataType = AST_DATA_TYPE_UNION;
-        }
-    }
+    IdentifierResolutionType(self,decl->returnType);
 
 
     char *ident                   = decl->ident.value.data;
@@ -333,19 +431,21 @@ void IdentifierResolutionFunctionDecl(struct IdentifierResolution *self,struct A
     
     HashMapAdd(&self->structMap,ident,identLength,entry);
 
-    struct HashMap *newIdentMap = identMap;
+    struct HashMap newIdentMap = IdentifierResolutionCopyIdentMap(self,identMap);
 
     for(u64 i = 0; i < decl->arguments.len; i++)
     {
-        IdentifierResolutionFunctionArgument(self,LinkedListAt(&decl->arguments,i),newIdentMap);
+        IdentifierResolutionFunctionArgument(self,LinkedListAt(&decl->arguments,i),&newIdentMap);
     }
 
     
     if(ACHIOR_LABS_NOT_NULL(decl->block))
     {
-        IdentifierResolutionBlockStmt(self,decl->block,newIdentMap);
+        IdentifierResolutionBlockStmt(self,decl->block,&newIdentMap);
     }
 }
+
+
 
 
 
@@ -356,28 +456,8 @@ void IdentifierResolutionFunctionArgument(struct IdentifierResolution *self,stru
         return;
     }
 
-    if(ACHIOR_LABS_EQUAL(argument->type->dataType,AST_DATA_TYPE_AGGREGATE))
-    {
-        struct ASTAggregateType *type = (struct ASTAggregateType *)argument->type->type;
-        char *ident                   = type->ident.value.data;
-        u64 identLength               = ACHIOR_LABS_STRLEN(ident);
-        struct IdentifierEntry *entry = HashMapGet(&self->structMap,ident,identLength);
-
-        if(ACHIOR_LABS_NULL(entry))
-        {
-            puts("unknown aggregate type encountered");
-        }
-
-        if(ACHIOR_LABS_EQUAL(entry->aggregateKind,IDENTIFIER_AGGREGATE_STRUCT))
-        {
-            argument->type->dataType = AST_DATA_TYPE_STRUCT;
-        }
-        else if(ACHIOR_LABS_EQUAL(entry->aggregateKind,IDENTIFIER_AGGREGATE_STRUCT))
-        {
-            argument->type->dataType = AST_DATA_TYPE_UNION;
-        }
-    }
-
+    
+    IdentifierResolutionType(self,argument->type);
 
     char *ident                   = argument->ident.value.data;
     u64 identLength               = ACHIOR_LABS_STRLEN(ident);
@@ -387,7 +467,7 @@ void IdentifierResolutionFunctionArgument(struct IdentifierResolution *self,stru
     {
         if(ACHIOR_LABS_TRUE(entry->isCurrent))
         {
-            //puts("function argument redeclared : [error]");
+            puts("function argument redeclared : [error]");
             return;
         }
         
@@ -407,10 +487,10 @@ void IdentifierResolutionFunctionArgument(struct IdentifierResolution *self,stru
 void IdentifierResolutionBlockStmt(struct IdentifierResolution *self,struct ASTBlockStmt *block,struct HashMap *identMap)
 {
     
-    struct HashMap *newIdentMap = identMap;
+    struct HashMap newIdentMap = IdentifierResolutionCopyIdentMap(self,identMap);
     for(u64 i = 0; i < block->stmts.len; i++)
     {
-        IdentifierResolutionStmt(self,LinkedListAt(&block->stmts,i),newIdentMap);
+        IdentifierResolutionStmt(self,LinkedListAt(&block->stmts,i),&newIdentMap);
     }   
 }
 
@@ -495,28 +575,7 @@ void IdentifierResolutionVariableDeclStmt(struct IdentifierResolution *self,stru
         return;
     }
 
-    if(ACHIOR_LABS_EQUAL(stmt->type->dataType,AST_DATA_TYPE_AGGREGATE))
-    {
-        struct ASTAggregateType *type = (struct ASTAggregateType *)stmt->type->type;
-        char *ident                   = type->ident.value.data;
-        u64 identLength               = ACHIOR_LABS_STRLEN(ident);
-        struct IdentifierEntry *entry = HashMapGet(&self->structMap,ident,identLength);
-
-        if(ACHIOR_LABS_NULL(entry))
-        {
-            puts("unknown aggregate type encountered");
-        }
-
-        if(ACHIOR_LABS_EQUAL(entry->aggregateKind,IDENTIFIER_AGGREGATE_STRUCT))
-        {
-            stmt->type->dataType = AST_DATA_TYPE_STRUCT;
-        }
-        else if(ACHIOR_LABS_EQUAL(entry->aggregateKind,IDENTIFIER_AGGREGATE_STRUCT))
-        {
-            stmt->type->dataType = AST_DATA_TYPE_UNION;
-        }
-    }
-
+    IdentifierResolutionType(self,stmt->type);
 
     char *ident                   = stmt->ident.value.data;
     u64 identLength               = ACHIOR_LABS_STRLEN(ident);
@@ -759,12 +818,17 @@ void IdentifierResolutionExpression(struct IdentifierResolution *self,struct AST
         }
         case AST_EXPRESSION_STRUCT_ACCESS:
         {
-            //IdentifierResolutionStructAccessExpr(self,expr->expr,identMap);
+            IdentifierResolutionStructAccessExpr(self,expr->expr,identMap);
             break;
         }
         case AST_EXPRESSION_STRUCT_POINTER_ACCESS:
         {
-            //IdentifierResolutionStructPointerAccessExpr(self,expr->expr,identMap);
+            IdentifierResolutionStructPointerAccessExpr(self,expr->expr,identMap);
+            break;
+        }
+        case AST_EXPRESSION_METHOD:
+        {
+            IdentifierResolutionMethodExpr(self,expr->expr,identMap);
             break;
         }
         default:
@@ -777,6 +841,46 @@ void IdentifierResolutionExpression(struct IdentifierResolution *self,struct AST
 
 
 
+void IdentifierResolutionMethodExpr(struct IdentifierResolution *self,struct ASTMethodExpr *expr,struct HashMap *identMap)
+{
+    if( ACHIOR_LABS_NULL(expr))
+    {
+        return;
+    }
+
+    IdentifierResolutionExpression(self,expr->lhs,identMap);
+ 
+
+    for(u64 i = 0; i < expr->arguments.len; i++)
+    {
+        struct ASTExpression *argument = LinkedListAt(&expr->arguments,i);
+        IdentifierResolutionExpression(self,argument,identMap);
+    }
+
+}
+
+
+
+void IdentifierResolutionStructPointerAccessExpr(struct IdentifierResolution *self,struct ASTStructPointerAccessExpr *expr,struct HashMap *identMap)
+{
+    if( ACHIOR_LABS_NULL(expr))
+    {
+        return;
+    }
+
+    IdentifierResolutionExpression(self,expr->lhs,identMap);
+}
+
+
+void IdentifierResolutionStructAccessExpr(struct IdentifierResolution *self,struct ASTStructAccessExpr *expr,struct HashMap *identMap)
+{
+    if( ACHIOR_LABS_NULL(expr))
+    {
+        return;
+    }
+
+    IdentifierResolutionExpression(self,expr->lhs,identMap);
+}
 
 
 void IdentifierResolutionLenExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap)
@@ -942,31 +1046,29 @@ void IdentifierResolutionAddressOfExpr(struct IdentifierResolution *self,void *e
 
 
 
-void IdentifierResolutionFunctionCallExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap)
+void IdentifierResolutionFunctionCallExpr(struct IdentifierResolution *self,struct ASTFunctionCallExpr *expr,struct HashMap *identMap)
 {
     if( ACHIOR_LABS_NULL(expr))
     {
         return;
     }
 
-    struct ASTFunctionCallExpr *function = (struct ASTFunctionCallExpr *)expr;
+    IdentifierResolutionExpression(self,expr->base,identMap);    
 
-    IdentifierResolutionExpression(self,function->base,identMap);    
-
-    for(u64 i = 0; i < function->arguments.len; i++)
+    for(u64 i = 0; i < expr->arguments.len; i++)
     {
-        struct ASTExpression *argument = LinkedListAt(&function->arguments,i);
+        struct ASTExpression *argument = LinkedListAt(&expr->arguments,i);
         IdentifierResolutionExpression(self,argument,identMap);
     }
 
-    struct ASTVariableExpr *variableExpr     = ((struct ASTVariableExpr *)function->base->expr);
+    struct ASTVariableExpr *variableExpr     = ((struct ASTVariableExpr *)expr->base->expr);
     char *ident                              = variableExpr->ident.value.data;
     u64 identLength                          = ACHIOR_LABS_STRLEN(ident);
     struct ASTFunctionAttributes *attributes = HashMapGet(&self->functionAttributes,ident,identLength);
 
     if(ACHIOR_LABS_NOT_NULL(attributes))
     {
-        function->attributes = attributes;
+        expr->attributes = attributes;
     }
     else
     {
@@ -1049,6 +1151,7 @@ void IdentifierResolutionVariableExpr(struct IdentifierResolution *self,void *ex
     if(ACHIOR_LABS_NULL(entry))
     {
         puts("illegal use of an undeclared variable identifier : [error]");
+        puts(ident);
         return;
     }
 

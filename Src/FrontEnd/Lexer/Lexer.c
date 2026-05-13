@@ -622,6 +622,10 @@ void LexerAddKeywords(struct Lexer *self,struct String str)
 	{
 		LexerAddToken(self,TOKEN_KEYWORD_U64,str);
 	}
+	else if (LexerMatchKeyword(self,str,"use"))
+	{
+		LexerAddToken(self,TOKEN_KEYWORD_USE,str);
+	}
 	else if (LexerMatchKeyword(self,str,"union"))
 	{
 		LexerAddToken(self,TOKEN_KEYWORD_UNION,str);
@@ -983,7 +987,12 @@ void LexerScanToken(struct Lexer *self)
 		}
 		case '>':
 		{
-			if ( LexerMatchToken(self,'=',1))
+			if ( LexerMatchToken(self,'>',1))
+			{
+				StringPushBack(&str,">>");
+				LexerAddTokenDouble(self,TOKEN_RIGHT_SHIFT,str);
+			}
+			else if ( LexerMatchToken(self,'=',1))
 			{
 				StringPushBack(&str,">=");
 				LexerAddTokenDouble(self,TOKEN_GREATER_EQUAL,str);
@@ -997,7 +1006,12 @@ void LexerScanToken(struct Lexer *self)
 		}
 		case '<':
 		{
-			if ( LexerMatchToken(self,'=',1))
+			if ( LexerMatchToken(self,'<',1))
+			{
+				StringPushBack(&str,"<<");
+				LexerAddTokenDouble(self,TOKEN_LEFT_SHIFT,str);
+			}
+			else if ( LexerMatchToken(self,'=',1))
 			{
 				StringPushBack(&str,"<=");
 				LexerAddTokenDouble(self,TOKEN_LESS_EQUAL,str);
@@ -1089,6 +1103,8 @@ void LexerScanTokens(struct Lexer *self)
 		self->start = self->index;
 		LexerScanToken(self);
 	}
+
+	puts("Lexing done");
 
 	return;
 }

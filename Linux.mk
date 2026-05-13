@@ -14,6 +14,7 @@ OBJECTS= $(OBJ)/Support/BumpAllocator.o                                         
 		 $(OBJ)/CmdLine/CmdLineArgumentList.o                                         \
 		 $(OBJ)/CmdLine/CmdLine.o                                                     \
 		 $(OBJ)/C4COptions/C4COptions.o                                               \
+		 $(OBJ)/FrontEnd/ModuleSystem/ModuleSystem.o                                  \
 		 $(OBJ)/FrontEnd/Lexer/Token.o                                                \
 		 $(OBJ)/FrontEnd/Lexer/Lexer.o                                                \
 		 $(OBJ)/FrontEnd/AST/AST.o                                                    \
@@ -21,6 +22,7 @@ OBJECTS= $(OBJ)/Support/BumpAllocator.o                                         
 		 $(OBJ)/FrontEnd/Parser/Parser.o                                              \
 		 $(OBJ)/FrontEnd/TreeWalker/TreeWalker.o                                      \
 		 $(OBJ)/FrontEnd/IdentifierResolution/IdentifierResolution.o                  \
+		 $(OBJ)/FrontEnd/TypeChecking/TypeChecking.o                                  \
 		 $(OBJ)/FrontEnd/Driver/Driver.o                                              \
 		 $(OBJ)/MiddleEnd/C/ASTToC.o                                                  \
 		 $(OBJ)/MiddleEnd/Driver/Driver.o                                             \
@@ -72,6 +74,9 @@ $(OBJ)/C4COptions/C4COptions.o:$(SRC)/C4COptions/C4COptions.c
 
 
 
+$(OBJ)/FrontEnd/ModuleSystem/ModuleSystem.o: $(SRC)/FrontEnd/ModuleSystem/ModuleSystem.c
+	$(CC) -c $^ -o $@
+
 
 $(OBJ)/FrontEnd/Lexer/Token.o: $(SRC)/FrontEnd/Lexer/Token.c
 	$(CC) -c $^ -o $@
@@ -102,6 +107,10 @@ $(OBJ)/FrontEnd/TreeWalker/TreeWalker.o: $(SRC)/FrontEnd/TreeWalker/TreeWalker.c
 
 
 $(OBJ)/FrontEnd/IdentifierResolution/IdentifierResolution.o: $(SRC)/FrontEnd/IdentifierResolution/IdentifierResolution.c
+	$(CC) -c $^ -o $@
+
+
+$(OBJ)/FrontEnd/TypeChecking/TypeChecking.o: $(SRC)/FrontEnd/TypeChecking/TypeChecking.c
 	$(CC) -c $^ -o $@
 
 

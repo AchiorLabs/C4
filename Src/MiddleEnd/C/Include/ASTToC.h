@@ -80,7 +80,7 @@ void ASTToCAssignmentExpr(struct ASTToC *self,void *expr);
 
 void ASTToCAssignmentOperator(struct ASTToC *self,enum ASTAssignmentOperator op);
 
-void ASTToCFunctionCallExpr(struct ASTToC *self,void *expr);
+void ASTToCFunctionCallExpr(struct ASTToC *self,struct ASTFunctionCallExpr *expr);
 
 void ASTToCCastExpr(struct ASTToC *self,void *expr);
 
@@ -108,5 +108,8 @@ void ASTToCLenExpr(struct ASTToC *self,void *expr);
 void ASTToCStructAccessExpr(struct ASTToC *self,struct ASTStructAccessExpr *expr);
 
 void ASTToCStructPointerAccessExpr(struct ASTToC *self,struct ASTStructPointerAccessExpr *expr);
+
+
+void ASTToCMethodExpr(struct ASTToC *self,struct ASTMethodExpr *expr);
 
 #endif

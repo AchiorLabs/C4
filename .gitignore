@@ -1,6 +1,8 @@
 *test*
 Target
 Objects
-
+package-lock.json
+Test
+.*
 # iwashere personal notes
 .iwashere/

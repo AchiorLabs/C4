@@ -433,7 +433,7 @@ void ASTToCType(struct ASTToC *self,struct ASTType *type,struct LinkedList *arra
             break;
         }
         case AST_DATA_TYPE_POINTER:
-        {puts("ai");
+        {
             struct ASTPointerType *ptrType = (struct ASTPointerType *)type->type;
             ASTToCType(self,ptrType->type,arrayBuffer);
             ACHIOR_LABS_FPRINTF(self->fileHandle,"*");
@@ -446,7 +446,6 @@ void ASTToCType(struct ASTToC *self,struct ASTType *type,struct LinkedList *arra
             ASTToCType(self,arrayType->type,arrayBuffer);
             break;
         }
-        case AST_DATA_TYPE_AGGREGATE:
         case AST_DATA_TYPE_STRUCT:
         {
             struct ASTStructType *structType = (struct ASTStructType *)type->type;
@@ -457,6 +456,7 @@ void ASTToCType(struct ASTToC *self,struct ASTType *type,struct LinkedList *arra
         }
         default:
         {
+            printf("%d [type] \n",type->dataType);
             ACHIOR_LABS_FPRINTF(self->fileHandle,"unknown-type");
         }
     }	
@@ -573,8 +573,13 @@ void ASTToCVariableDeclStmt(struct ASTToC *self,struct ASTVariableDecl *stmt,cha
         ACHIOR_LABS_FPRINTF(self->fileHandle,"]");
     }
 
-    ACHIOR_LABS_FPRINTF(self->fileHandle," = ");
-    ASTToCVariableDeclInit(self,stmt->init);
+
+    if(ACHIOR_LABS_NOT_NULL(stmt->init))
+    {
+        ACHIOR_LABS_FPRINTF(self->fileHandle," = ");
+        ASTToCVariableDeclInit(self,stmt->init);
+    }
+
     ACHIOR_LABS_FPRINTF(self->fileHandle,";");
 }
 
@@ -829,6 +834,11 @@ void ASTToCExpression(struct ASTToC *self,struct ASTExpression *expr)
             ASTToCStructPointerAccessExpr(self,expr->expr);
             break;
         }
+        case AST_EXPRESSION_METHOD:
+        {
+            ASTToCMethodExpr(self,expr->expr);
+            break;
+        }
         default:
         {
             ACHIOR_LABS_FPRINTF(self->fileHandle,"unknown expression ");
@@ -838,6 +848,72 @@ void ASTToCExpression(struct ASTToC *self,struct ASTExpression *expr)
 }
 
 
+
+char *ASTToCGetStructIdent(struct ASTToC *self,struct ASTType *type)
+{
+    if(ACHIOR_LABS_NULL(type))
+    {
+        puts("NULLL");
+    }
+
+    switch (type->dataType)
+    {
+        case AST_DATA_TYPE_STRUCT:
+        {
+            struct ASTStructType *structType = (struct ASTStructType *)type->type;
+            return structType->ident.value.data;
+            break;
+        }
+        default:
+        {
+            return "shotya";
+        }
+    }
+}
+
+
+
+
+
+
+void ASTToCMethodExpr(struct ASTToC *self,struct ASTMethodExpr *expr)
+{
+    if( ACHIOR_LABS_NULL(expr))
+    {
+        return;
+    }
+
+    puts("here");
+
+    char *structIdent = ASTToCGetStructIdent(self,expr->lhs->dataType);
+
+    puts("hmm");
+
+    ACHIOR_LABS_FPRINTF(self->fileHandle,"__C4C%s",structIdent);
+    ASTToCIdentifier(self,expr->member);
+    ACHIOR_LABS_FPRINTF(self->fileHandle,"(&");
+    ASTToCExpression(self,expr->lhs);
+
+    u64 argumentLength = expr->arguments.len;
+
+    if(ACHIOR_LABS_GREATER(argumentLength,0))
+    {
+        ACHIOR_LABS_FPRINTF(self->fileHandle,",");
+    }
+
+    for(u64 i = 0; i < argumentLength; i++)
+    {
+        struct ASTExpression *argument = LinkedListAt(&expr->arguments,i);
+        ASTToCExpression(self,argument);
+
+        if(ACHIOR_LABS_LESS(i,argumentLength - 1))
+        {
+            ACHIOR_LABS_FPRINTF(self->fileHandle,",");
+        }
+    }
+
+    ACHIOR_LABS_FPRINTF(self->fileHandle,")");
+}
 
 
 void ASTToCStructAccessExpr(struct ASTToC *self,struct ASTStructAccessExpr *expr)
@@ -1042,25 +1118,23 @@ void ASTToCAddressOfExpr(struct ASTToC *self,void *expr)
 
 
 
-void ASTToCFunctionCallExpr(struct ASTToC *self,void *expr)
+void ASTToCFunctionCallExpr(struct ASTToC *self,struct ASTFunctionCallExpr *expr)
 {
     if( ACHIOR_LABS_NULL(expr))
     {
         return;
     }
 
-    struct ASTFunctionCallExpr *function = (struct ASTFunctionCallExpr *)expr;
-
-    ASTToCExpression(self,function->base);
+    ASTToCExpression(self,expr->base);
 
     ACHIOR_LABS_FPRINTF(self->fileHandle,"(");
 
-    for(u64 i = 0; i < function->arguments.len; i++)
+    for(u64 i = 0; i < expr->arguments.len; i++)
     {
-        struct ASTExpression *argument = LinkedListAt(&function->arguments,i);
+        struct ASTExpression *argument = LinkedListAt(&expr->arguments,i);
         ASTToCExpression(self,argument);
 
-        if(ACHIOR_LABS_LESS(i,function->arguments.len - 1))
+        if(ACHIOR_LABS_LESS(i,expr->arguments.len - 1))
         {
             ACHIOR_LABS_FPRINTF(self->fileHandle,",");
         }
@@ -1209,6 +1283,26 @@ void ASTToCBinaryOperator(struct ASTToC *self,enum ASTBinaryOperator op)
         case AST_BINARY_OPERATOR_GREATER_EQUAL:
         {
             ACHIOR_LABS_FPRINTF(self->fileHandle," >= ");
+            break;
+        }
+        case AST_BINARY_OPERATOR_BITWISE_AND:
+        {
+            ACHIOR_LABS_FPRINTF(self->fileHandle," & ");
+            break;
+        }
+        case AST_BINARY_OPERATOR_BITWISE_OR:
+        {
+            ACHIOR_LABS_FPRINTF(self->fileHandle," | ");
+            break;
+        }
+        case AST_BINARY_OPERATOR_BITWISE_LEFT_SHIFT:
+        {
+            ACHIOR_LABS_FPRINTF(self->fileHandle," << ");
+            break;
+        }
+        case AST_BINARY_OPERATOR_BITWISE_RIGHT_SHIFT:
+        {
+            ACHIOR_LABS_FPRINTF(self->fileHandle," << ");
             break;
         }
         default:

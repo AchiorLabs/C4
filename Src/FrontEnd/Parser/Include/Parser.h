@@ -180,6 +180,8 @@ struct ASTDeclaration *ParserParseDecl(
 
 
 
+struct ASTUseDecl *ParserParseUseDecl(struct Parser *self);
+
 
 struct ASTStructDecl *ParserParseStructDecl(
 	struct Parser *self
@@ -402,6 +404,8 @@ struct ASTExpression *ParserParseAddressOfExpr(
 );
 
 
+struct ASTExpression *ParserParseSelfExpr(struct Parser *self);
+
 
 struct ASTExpression *ParserParseVariableExpr(
 	struct Parser *self
@@ -446,6 +450,11 @@ struct ASTDeclaration *ParserMakeDeclaration(
 	enum ASTDeclarationType type,
 	void *decl
 );
+
+
+struct ASTUseDecl *ParserMakeUseDecl(struct Parser *self,struct LinkedList path,struct Token alias);
+
+
 
 struct ASTStructDecl *ParserMakeStructDecl(
 	struct Parser *self,
@@ -826,6 +835,8 @@ struct ASTStructPointerAccessExpr *ParserMakeStructPointerAccessExpr(
 
 
 
+
+struct ASTMethodExpr *ParserMakeMethodExpr(struct Parser *self,struct ASTExpression *lhs,struct Token member,struct LinkedList arguments);
 
 #endif
 

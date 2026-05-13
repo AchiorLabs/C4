@@ -115,6 +115,21 @@ bool ASTTypeNew(struct ASTType *self,enum ASTDataType dataType,void *type)
 
 
 
+bool ASTUseDeclNew(struct ASTUseDecl *self,struct LinkedList path,struct Token alias)
+{
+	if( ACHIOR_LABS_NULL(self))
+	{
+		return false;
+	}
+
+	self->path  = path;
+	self->alias = alias;
+	
+	return true;
+}
+
+
+
 
 bool ASTStructPropertyNew(struct ASTStructProperty *self,struct ASTType *type,struct Token ident)
 {
@@ -538,6 +553,20 @@ bool ASTExpressionNew(struct ASTExpression *self,enum ASTExpressionType type,voi
 }
 
 
+bool ASTMethodExprNew(struct ASTMethodExpr *self,struct ASTExpression *lhs,struct Token member,struct LinkedList arguments)
+{
+	if( ACHIOR_LABS_NULL(self))
+	{
+		return false;
+	}
+
+	self->lhs       = lhs;
+	self->member    = member;
+	self->arguments = arguments;
+
+	return true;
+}
+
 bool ASTStructPointerAccessExprNew(struct ASTStructPointerAccessExpr *self,struct ASTExpression *lhs,struct Token member)
 {
 	if( ACHIOR_LABS_NULL(self))
@@ -797,6 +826,17 @@ bool ASTUnaryExprNew(struct ASTUnaryExpr *self,enum ASTUnaryOperator op,struct A
 	return true;
 }
 
+
+bool ASTSelfExprNew(struct ASTSelfExpr *self,struct Token ident)
+{
+	if( ACHIOR_LABS_NULL(self))
+	{
+		return false;
+	}
+
+	self->ident = ident;
+	return true;
+}
 
 
 bool ASTVariableExprNew(struct ASTVariableExpr *self,struct Token ident)

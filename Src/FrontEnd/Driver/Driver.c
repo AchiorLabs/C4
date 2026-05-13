@@ -5,6 +5,11 @@
 
 struct Parser FrontEndDriverRun(struct C4CFrontEndOptions *options,struct BumpAllocator *bump)
 {
+	struct ModuleSystem moduleSystem;
+	ModuleSystemNew(&moduleSystem,bump,options);
+
+	return (struct Parser){0};
+
     struct Lexer lexer;
 	LexerNew(&lexer,options->input_file_name,options->input_file_source,bump);
 
@@ -53,10 +58,16 @@ struct Parser FrontEndDriverRun(struct C4CFrontEndOptions *options,struct BumpAl
 		return parser;
 	}
 
+
 	struct IdentifierResolution resolver;
 	IdentifierResolutionNew(&resolver,parser.astProgram,options->input_file_name,options->global_counter,bump);
 
 	options->global_counter = resolver.globalCounter;
+
+	struct TypeChecking typeChecker;
+	TypeCheckingNew(&typeChecker,parser.astProgram,options->global_counter,bump);
+
+	options->global_counter = typeChecker.globalCounter;
 
 	return parser;
 }

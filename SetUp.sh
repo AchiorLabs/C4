@@ -8,6 +8,7 @@ set -e
 
 mkdir -p Target
 mkdir -p Objects
+mkdir -p Objects/FrontEnd/ModuleSystem
 mkdir -p Objects/FrontEnd/Lexer
 mkdir -p Objects/FrontEnd/AST
 mkdir -p Objects/FrontEnd/Parser
@@ -85,7 +86,3 @@ case "$DISTRO" in
 esac
 echo "[+] Installlation complete!!"
 echo "Have fun using c4 :)"
-
-exit 0
-bash DevTools/ResetSyntaxHighlighting.sh
-bash DevTools/SetSyntaxHighlighting.sh

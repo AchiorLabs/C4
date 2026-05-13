@@ -42,6 +42,7 @@ bool ASTProgramNew(struct ASTProgram *self,struct LinkedList decls);
 enum ASTDeclarationType
 {
 	AST_DECLARATION_NONE,
+	AST_DECLARATION_USE,
 	AST_DECLARATION_STRUCT,
 	AST_DECLARATION_UNION,
 	AST_DECLARATION_IMPL,
@@ -165,6 +166,16 @@ struct ASTFunctionAttributes
 future ****
 
 */
+
+struct ASTUseDecl
+{
+    struct LinkedList path;
+    struct Token alias;
+};
+
+
+bool ASTUseDeclNew(struct ASTUseDecl *self,struct LinkedList path,struct Token alias);
+
 
 struct ASTStructProperty
 {
@@ -517,6 +528,7 @@ enum ASTExpressionType
 	AST_EXPRESSION_LEN,
 	AST_EXPRESSION_STRUCT_ACCESS,
 	AST_EXPRESSION_STRUCT_POINTER_ACCESS,
+	AST_EXPRESSION_METHOD,
 };
 
 
@@ -565,6 +577,18 @@ struct ASTVariableExpr
 };
 
 bool ASTVariableExprNew(struct ASTVariableExpr *self,struct Token ident);
+
+
+
+struct ASTSelfExpr
+{
+	struct Token ident;
+	struct ASTType *baseType;
+	struct ASTType *dataType;
+};
+
+bool ASTSelfExprNew(struct ASTSelfExpr *self,struct Token ident);
+
 
 
 enum ASTUnaryOperator
@@ -621,6 +645,10 @@ enum ASTBinaryOperator
 	AST_BINARY_OPERATOR_GREATER_EQUAL,
 	AST_BINARY_OPERATOR_AND,
 	AST_BINARY_OPERATOR_OR,
+	AST_BINARY_OPERATOR_BITWISE_AND,
+	AST_BINARY_OPERATOR_BITWISE_OR,
+	AST_BINARY_OPERATOR_BITWISE_LEFT_SHIFT,
+	AST_BINARY_OPERATOR_BITWISE_RIGHT_SHIFT,
 };
 
 
@@ -847,6 +875,21 @@ struct ASTStructPointerAccessExpr
 
 
 bool ASTStructPointerAccessExprNew(struct ASTStructPointerAccessExpr *self,struct ASTExpression *lhs,struct Token member);
+
+
+
+
+struct ASTMethodExpr
+{
+	struct ASTExpression *lhs;
+	struct Token member;
+	struct LinkedList arguments;
+	struct ASTFunctionAttributes *attributes;
+	struct ASTType *dataType;
+};
+
+
+bool ASTMethodExprNew(struct ASTMethodExpr *self,struct ASTExpression *lhs,struct Token member,struct LinkedList arguments);
 
 
 

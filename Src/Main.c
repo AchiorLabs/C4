@@ -17,7 +17,7 @@ char *ReadFileToString(char *file_name,struct BumpAllocator *bump)
     i64 size = ACHIOR_LABS_FTELL(fin);
     ACHIOR_LABS_FSEEK(fin,0,SEEK_SET);
 
-    char *file_source = ACHIOR_LABS_ARENA_ALLOC(bump,char,size + 1);
+    char *file_source = ACHIOR_LABS_ARENA_ALLOC(bump,char,size + 10);
     if ( ACHIOR_LABS_NULL(file_source))
     {
         ACHIOR_LABS_RETURN_DEFER(defer);

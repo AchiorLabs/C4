@@ -95,7 +95,7 @@ void IdentifierResolutionAssignmentExpr(struct IdentifierResolution *self,void *
 
 void IdentifierResolutionAssignmentOperator(struct IdentifierResolution *self,enum ASTAssignmentOperator op,struct HashMap *identMap);
 
-void IdentifierResolutionFunctionCallExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap);
+void IdentifierResolutionFunctionCallExpr(struct IdentifierResolution *self,struct ASTFunctionCallExpr *expr,struct HashMap *identMap);
 
 void IdentifierResolutionCastExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap);
 
@@ -119,6 +119,12 @@ void IdentifierResolutionAsPtrExpr(struct IdentifierResolution *self,void *expr,
 
 void IdentifierResolutionLenExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap);
 
+void IdentifierResolutionStructAccessExpr(struct IdentifierResolution *self,struct ASTStructAccessExpr *expr,struct HashMap *identMap);
+
+
+void IdentifierResolutionStructPointerAccessExpr(struct IdentifierResolution *self,struct ASTStructPointerAccessExpr *expr,struct HashMap *identMap);
+
+void IdentifierResolutionMethodExpr(struct IdentifierResolution *self,struct ASTMethodExpr *expr,struct HashMap *identMap);
 
 struct String IdentifierResolutionMakeTmp(struct IdentifierResolution *self);
 
