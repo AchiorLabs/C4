@@ -34,18 +34,18 @@ void ASTPrintProgram(struct ASTPrint *self,struct ASTProgram *ast_program)
 }
 
 
-void ASTPrintDecl(struct ASTPrint *self,struct ASTDeclaration *ast_decl)
+void ASTPrintDecl(struct ASTPrint *self,struct ASTDeclaration *decl)
 {
-    if( ACHIOR_LABS_NULL(ast_decl))
+    if( ACHIOR_LABS_NULL(decl))
     {
         return;
     }
 
-	switch(ast_decl->type)
+	switch(ASTDECLARATION_GET_KIND(*decl))
 	{
 		case AST_DECLARATION_FUNCTION:
 		{
-			ASTPrintFunctionDecl(self,ast_decl->decl);
+			ASTPrintFunctionDecl(self,ASTDECLARATION_GET_DECL(*decl));
 			break;
 		}
 		default:
@@ -57,9 +57,9 @@ void ASTPrintDecl(struct ASTPrint *self,struct ASTDeclaration *ast_decl)
 }
 
 
-void ASTPrintIdentifier(struct ASTPrint *self,struct Token ident)
+void ASTPrintIdentifier(struct ASTPrint *self,struct Token *ident)
 {
-    ACHIOR_LABS_FPRINTF(self->output_file_handle,"%s",ident.value.data);
+    ACHIOR_LABS_FPRINTF(self->output_file_handle,"%s",TOKEN_GET_VALUE_DATA(*ident));
 }
 
 
@@ -138,18 +138,18 @@ void ASTPrintBlockStmt(struct ASTPrint *self,struct ASTBlockStmt *ast_block)
 }
 
 
-void ASTPrintStmt(struct ASTPrint *self,struct ASTStatement *ast_stmt)
+void ASTPrintStmt(struct ASTPrint *self,struct ASTStatement *stmt)
 {
-    if( ACHIOR_LABS_NULL(ast_stmt))
+    if( ACHIOR_LABS_NULL(stmt))
     {
         return;
     }
 
-	switch(ast_stmt->type)
+	switch(ASTSTATEMENT_GET_KIND(*stmt))
 	{
 		case AST_STATEMENT_RETURN:
 		{
-            ASTPrintReturnStmt(self,ast_stmt->stmt);
+            ASTPrintReturnStmt(self,ASTSTATEMENT_GET_STMT(*stmt));
 			break;
 		}
 		default:
@@ -162,15 +162,15 @@ void ASTPrintStmt(struct ASTPrint *self,struct ASTStatement *ast_stmt)
 
 
 
-void ASTPrintReturnStmt(struct ASTPrint *self,struct ASTReturnStmt *ast_stmt)
+void ASTPrintReturnStmt(struct ASTPrint *self,struct ASTReturnStmt *stmt)
 {
-    if( ACHIOR_LABS_NULL(ast_stmt))
+    if( ACHIOR_LABS_NULL(stmt))
     {
         return;
     }
 
     ACHIOR_LABS_FPRINTF(self->output_file_handle,"return [EXPR] =>  ");
-    ASTPrintExpr(self,ast_stmt->expr);
+    ASTPrintExpr(self,ASTRETURNSTMT_GET_EXPR(*stmt));
     ACHIOR_LABS_FPRINTF(self->output_file_handle,"\n\n");
 }
 
@@ -183,11 +183,11 @@ void ASTPrintExpr(struct ASTPrint *self,struct ASTExpression *expr)
         return;
     }
 
-	switch(expr->type)
+	switch(ASTEXPRESSION_GET_KIND(*expr))
     {
         case AST_EXPRESSION_BINARY:
         {
-            ASTPrintBinaryExpr(self,expr->expr);
+            ASTPrintBinaryExpr(self,ASTEXPRESSION_GET_EXPR(*expr));
             break;
         }
         case AST_EXPRESSION_UNARY:
@@ -328,12 +328,12 @@ void ASTPrintLiteralExpr(struct ASTPrint *self,void *expr)
     //ACHIOR_LABS_PRINT("literal");
     struct ASTLiteralExpr *literal = (struct ASTLiteralExpr *)expr;
 
-    switch(literal->type)
+    switch(ASTLITERALEXPR_GET_KIND(*literal))
     {
         case AST_LITERAL_I32:
         {
             ACHIOR_LABS_FPRINTF(self->output_file_handle,"[i32]");
-            ACHIOR_LABS_FPRINTF(self->output_file_handle,"%s",literal->literal.value.data);
+            ACHIOR_LABS_FPRINTF(self->output_file_handle,"%s",literal->literal->value.data);
             break;
         }
         default:

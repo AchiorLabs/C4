@@ -46,18 +46,18 @@ void TreeWalkerProgram(struct TreeWalker *self,struct ASTProgram *ast_program)
 }
 
 
-void TreeWalkerDecl(struct TreeWalker *self,struct ASTDeclaration *ast_decl)
+void TreeWalkerDecl(struct TreeWalker *self,struct ASTDeclaration *decl)
 {
-    if( ACHIOR_LABS_NULL(ast_decl))
+    if( ACHIOR_LABS_NULL(decl))
     {
         return;
     }
 
-	switch(ast_decl->type)
+	switch(ASTDECLARATION_GET_KIND(*decl))
 	{
 		case AST_DECLARATION_FUNCTION:
 		{
-			TreeWalkerFunctionDecl(self,ast_decl->decl);
+			TreeWalkerFunctionDecl(self,ASTDECLARATION_GET_DECL(*decl));
 			break;
 		}
 		default:
@@ -150,18 +150,18 @@ void TreeWalkerBlockStmt(struct TreeWalker *self,struct ASTBlockStmt *ast_block)
 }
 
 
-void TreeWalkerStmt(struct TreeWalker *self,struct ASTStatement *ast_stmt)
+void TreeWalkerStmt(struct TreeWalker *self,struct ASTStatement *stmt)
 {
-    if( ACHIOR_LABS_NULL(ast_stmt))
+    if( ACHIOR_LABS_NULL(stmt))
     {
         return;
     }
 
-	switch(ast_stmt->type)
+	switch(ASTSTATEMENT_GET_KIND(*stmt))
 	{
 		case AST_STATEMENT_RETURN:
 		{
-            TreeWalkerReturnStmt(self,ast_stmt->stmt);
+            TreeWalkerReturnStmt(self,ASTSTATEMENT_GET_STMT(*stmt));
 			break;
 		}
 		default:
@@ -174,15 +174,15 @@ void TreeWalkerStmt(struct TreeWalker *self,struct ASTStatement *ast_stmt)
 
 
 
-void TreeWalkerReturnStmt(struct TreeWalker *self,struct ASTReturnStmt *ast_stmt)
+void TreeWalkerReturnStmt(struct TreeWalker *self,struct ASTReturnStmt *stmt)
 {
-    if( ACHIOR_LABS_NULL(ast_stmt))
+    if( ACHIOR_LABS_NULL(stmt))
     {
         return;
     }
 
     //ACHIOR_LABS_FPRINTF(self->output_file_handle,"return [EXPR] =>  ");
-    struct TreeWalkerValue value = TreeWalkerExpr(self,ast_stmt->expr);
+    struct TreeWalkerValue value = TreeWalkerExpr(self,ASTRETURNSTMT_GET_EXPR(*stmt));
     //ACHIOR_LABS_FPRINTF(self->output_file_handle,"\n\n");
 
     switch(value.type)
@@ -212,21 +212,21 @@ struct TreeWalkerValue TreeWalkerExpr(struct TreeWalker *self,struct ASTExpressi
 
 
     
-	switch(expr->type)
+	switch(ASTEXPRESSION_GET_KIND(*expr))
     {
         case AST_EXPRESSION_BINARY:
         {
-            value = TreeWalkerBinaryExpr(self,expr->expr);
+            value = TreeWalkerBinaryExpr(self,ASTEXPRESSION_GET_EXPR(*expr));
             break;
         }
         case AST_EXPRESSION_UNARY:
         {
-            value = TreeWalkerUnaryExpr(self,expr->expr);
+            value = TreeWalkerUnaryExpr(self,ASTEXPRESSION_GET_EXPR(*expr));
             break;
         }
         case AST_EXPRESSION_LITERAL:
         {
-            value = TreeWalkerLiteralExpr(self,expr->expr);
+            value = TreeWalkerLiteralExpr(self,ASTEXPRESSION_GET_EXPR(*expr));
             break;
         }
         default:
@@ -456,13 +456,13 @@ struct TreeWalkerValue TreeWalkerLiteralExpr(struct TreeWalker *self,void *expr)
     //ACHIOR_LABS_PRINT("literal");
     struct ASTLiteralExpr *literal = (struct ASTLiteralExpr *)expr;
 
-    switch(literal->type)
+    switch(ASTLITERALEXPR_GET_KIND(*literal))
     {
         case AST_LITERAL_I32:
         {
             //ACHIOR_LABS_FPRINTF(self->output_file_handle,"[i32]");
             //ACHIOR_LABS_FPRINTF(self->output_file_handle,"%s",literal->literal.value.data);
-            TreeWalkerValueNew(&value,TREE_WALKER_VALUE_I32,literal->literal.value.data);
+            TreeWalkerValueNew(&value,TREE_WALKER_VALUE_I32,literal->literal->value.data);
             break;
         }
         default:

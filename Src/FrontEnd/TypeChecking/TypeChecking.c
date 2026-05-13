@@ -17,73 +17,26 @@ u64 max(u64 num1,u64 num2)
 
 
 
-bool StructMemberEntryNew(struct StructMemberEntry *self,struct String ident,struct ASTType *type,u64 offset)
+
+
+
+
+
+bool TypeCheckingNew(struct TypeChecking *self,struct Module *module,u64 globalCounter,struct BumpAllocator *bump)
 {
     if(ACHIOR_LABS_NULL(self))
     {
         return false;
     }
 
-    self->ident  = ident;
-    self->type   = type;
-    self->offset = offset;
-
-    return true;
-}
-
-
-
-bool StructEntryNew(struct StructEntry *self,struct String ident,struct Layout layout,struct HashMap members)
-{
-    if(ACHIOR_LABS_NULL(self))
-    {
-        return false;
-    }
-
-    self->ident   = ident;
-    self->layout  = layout;
-    self->members = members;
-
-    return true;
-}
-
-
-
-
-bool SymbolNew(struct Symbol *self,enum SymbolKind kind,struct String ident,struct String trueIdent,struct ASTType *type)
-{
-    if(ACHIOR_LABS_NULL(self))
-    {
-        return false;
-    }
-
-
-    self->kind      = kind;
-    self->ident     = ident;
-    self->trueIdent = trueIdent;
-    self->type      = type;
-
-    return true;
-}
-
-
-
-
-
-bool TypeCheckingNew(struct TypeChecking *self,struct ASTProgram *program,u64 globalCounter,struct BumpAllocator *bump)
-{
-    if(ACHIOR_LABS_NULL(self))
-    {
-        return false;
-    }
-
-    self->program       = program;
+    self->module        = module;
+    self->program       = module->ast;
     self->globalCounter = globalCounter;
     self->bump          = bump;
+    self->symbols       = self->module->symbols;
 
-    HashMapNew(&self->symbols,10,self->bump);
-
-    TypeCheckingProgram(self,program);
+    //puts("TypeChecking Begin --------------------------------------------------");
+    TypeCheckingProgram(self,module->ast);
 
     return true;
 }
@@ -101,6 +54,8 @@ bool TypeCheckingType(struct TypeChecking *self,struct ASTType *type)
     switch(type->dataType)
     {
         case AST_DATA_TYPE_VOID:
+        case AST_DATA_TYPE_STRING:
+        case AST_DATA_TYPE_CHAR:
         case AST_DATA_TYPE_I8:
         case AST_DATA_TYPE_I16:
         case AST_DATA_TYPE_I32:
@@ -125,6 +80,12 @@ bool TypeCheckingType(struct TypeChecking *self,struct ASTType *type)
             return TypeCheckingType(self,arrayType->type);
             break;
         }
+        case AST_DATA_TYPE_ENUM:
+        {
+            struct ASTStructType *structType = (struct ASTStructType *)type->type;
+            return true;
+            break;
+        }
         case AST_DATA_TYPE_STRUCT:
         {
             struct ASTStructType *structType = (struct ASTStructType *)type->type;
@@ -138,18 +99,20 @@ bool TypeCheckingType(struct TypeChecking *self,struct ASTType *type)
             break;
         }
     }	
+
+    return true;
 }
 
 
 
 u64 TypeCheckingDecodeSize(struct TypeChecking *self,struct ASTExpression *expr)
 {
-    switch(expr->type)
+    switch(ASTEXPRESSION_GET_KIND(*expr))
     {
         case AST_EXPRESSION_LITERAL:
         {
             struct ASTLiteralExpr *literalExpr = (struct ASTLiteralExpr *)expr->expr;
-            return (u64)atol(literalExpr->literal.value.data);
+            return (u64)atol(literalExpr->literal->value.data);
             break;
         }
     }
@@ -184,6 +147,7 @@ bool TypeCheckingBuildLayout(struct TypeChecking *self,struct ASTType *type)
             LayoutNew(&type->layout,size,alignment);
             break;
         }
+        case AST_DATA_TYPE_ENUM:
         case AST_DATA_TYPE_I32:
         case AST_DATA_TYPE_U32:
         {
@@ -234,10 +198,23 @@ bool TypeCheckingBuildLayout(struct TypeChecking *self,struct ASTType *type)
         case AST_DATA_TYPE_STRUCT:
         {
             struct ASTStructType *structType = (struct ASTStructType *)type->type;
-            struct String structIdent        = structType->ident.value;
-            struct Symbol *symbol            = HashMapGet(&self->symbols,structIdent.data,structIdent.size);
+            struct String structIdent        = TOKEN_GET_VALUE(*(structType->ident));
+            struct Module *module            = self->module;
 
-            if(ACHIOR_LABS_EQUAL(symbol->kind,SYMBOL_STRUCT))
+            if(ACHIOR_LABS_NOT_NULL(structType->module))
+            {
+                module = structType->module;
+            }
+
+            struct ModuleSymbol *symbol      = HashMapGet(&module->symbols,structIdent.data,structIdent.size);
+
+
+            if(ACHIOR_LABS_NULL(symbol))
+            {
+                return false;
+            }
+
+            if(ACHIOR_LABS_EQUAL(symbol->kind,MODULE_SYMBOL_STRUCT))
             {
                 LayoutNew(&type->layout,symbol->type->layout.size,symbol->type->layout.alignment);
             }
@@ -277,7 +254,7 @@ void TypeCheckingProgram(struct TypeChecking *self,struct ASTProgram *program)
 		TypeCheckingDeclaration(self,LinkedListAt(&program->decls,i));
 	}
 
-    puts("type checker done");
+    //puts("type checker done");
 }
 
 
@@ -288,32 +265,32 @@ void TypeCheckingDeclaration(struct TypeChecking *self,struct ASTDeclaration *de
         return;
     }
 
-	switch(decl->type)
+	switch(ASTDECLARATION_GET_KIND(*decl))
 	{
 		case AST_DECLARATION_STRUCT:
 		{
-			TypeCheckingStructDecl(self,decl->decl);
+			TypeCheckingStructDecl(self,ASTDECLARATION_GET_DECL(*decl));
 			break;
 		}
 		case AST_DECLARATION_UNION:
 		{
-			TypeCheckingUnionDecl(self,decl->decl);
+			TypeCheckingUnionDecl(self,ASTDECLARATION_GET_DECL(*decl));
 			break;
 		}
 		case AST_DECLARATION_IMPL:
 		{
-			TypeCheckingImplDecl(self,decl->decl);
+			TypeCheckingImplDecl(self,ASTDECLARATION_GET_DECL(*decl));
 			break;
 		}
 		case AST_DECLARATION_SUM:
 		{
             break;
-			//TypeCheckingSumDecl(self,decl->decl);
+			//TypeCheckingSumDecl(self,ASTDECLARATION_GET_DECL(*decl));
 			break;
 		}
 		case AST_DECLARATION_FUNCTION:
 		{
-			TypeCheckingFunctionDecl(self,decl->decl);
+			TypeCheckingFunctionDecl(self,ASTDECLARATION_GET_DECL(*decl));
 			break;
 		}
 		default:
@@ -353,18 +330,20 @@ void TypeCheckingStructDecl(struct TypeChecking *self,struct ASTStructDecl *decl
         if(! TypeCheckingType(self,property->type))
         {
             puts(" invalid argument type in struct ");
+            puts(decl->ident->value.data);
+            puts(property->ident->value.data);
             //exit(9);
         }
 
-        struct String memberIdent = property->ident.value;
+        struct String memberIdent = property->ident->value;
 
 
         TypeCheckingBuildLayout(self,property->type);
         struct Layout layout = property->type->layout; 
         u64 memberOffset     = align(structLayout.size,layout.alignment);
 
-        struct StructMemberEntry *member = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct StructMemberEntry,1);
-        StructMemberEntryNew(member,property->ident.value,property->type,memberOffset);
+        struct ModuleStructMemberEntry *member = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ModuleStructMemberEntry,1);
+        ModuleStructMemberEntryNew(member,property->ident->value,property->type,memberOffset);
         HashMapAdd(&members,memberIdent.data,memberIdent.size,member);
 
         structLayout.alignment = max(structLayout.alignment,layout.alignment);
@@ -373,11 +352,11 @@ void TypeCheckingStructDecl(struct TypeChecking *self,struct ASTStructDecl *decl
 
     structLayout.size = align(structLayout.size,structLayout.alignment);
 
-    struct StructEntry structEntry;
-    StructEntryNew(&structEntry,decl->ident.value,structLayout,members);
+    struct ModuleStructEntry structEntry;
+    ModuleStructEntryNew(&structEntry,decl->ident->value,structLayout,members);
 
 
-    struct String ident     = decl->ident.value;
+    struct String ident     = decl->ident->value;
     struct String trueIdent = ident;
 
 
@@ -387,12 +366,18 @@ void TypeCheckingStructDecl(struct TypeChecking *self,struct ASTStructDecl *decl
     struct ASTType *type = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTType,1);
     ASTTypeNew(type,AST_DATA_TYPE_STRUCT,structType);
 
-    struct Symbol *symbol = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct Symbol,1);
-    SymbolNew(symbol,SYMBOL_STRUCT,ident,trueIdent,type);
+    
+
+    struct ModuleSymbol *symbol = HashMapGet(&self->symbols,ident.data,ident.size);
+
+    if(ACHIOR_LABS_NULL(symbol))
+    {
+        puts("NULL symbol struct ");
+        exit(1);
+    }
 
     symbol->entry = structEntry;
-    
-    HashMapAdd(&self->symbols,ident.data,ident.size,symbol);
+    symbol->type  = type;
 }
 
 
@@ -452,8 +437,7 @@ void TypeCheckingFunctionDecl(struct TypeChecking *self,struct ASTFunctionDecl *
         TypeCheckingFunctionArgument(self,LinkedListAt(&decl->arguments,i));
     }
 
-
-    struct String ident                  = decl->ident.value;
+    struct String ident                  = decl->ident->value;
     struct String trueIdent              = ident;
 
     struct ASTFunctionType *functionType = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTFunctionType,1);
@@ -462,16 +446,26 @@ void TypeCheckingFunctionDecl(struct TypeChecking *self,struct ASTFunctionDecl *
     struct ASTType *type = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTType,1);
     ASTTypeNew(type,AST_DATA_TYPE_FUNCTION,functionType);
 
-    struct Symbol *symbol = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct Symbol,1);
-    SymbolNew(symbol,SYMBOL_FUNCTION,ident,trueIdent,type);
 
-    
-    HashMapAdd(&self->symbols,ident.data,ident.size,symbol);
+    struct ModuleSymbol *symbol = HashMapGet(&self->symbols,ident.data,ident.size);
+
+    if(ACHIOR_LABS_NULL(symbol))
+    {
+        puts("NULL symbol function ");
+        puts(ident.data);
+        return;
+        exit(1);
+    }
+
+    symbol->type  = type;
+
 
     if(ACHIOR_LABS_NOT_NULL(decl->block))
     {
         TypeCheckingBlockStmt(self,decl->block);
     }
+
+
 }
 
 
@@ -489,6 +483,7 @@ void TypeCheckingFunctionArgument(struct TypeChecking *self,struct ASTFunctionAr
     if(ACHIOR_LABS_FALSE(status))
     {
         puts("invalid function argument type");
+        puts(argument->ident->value.data);
         //exit(1);
     }
 
@@ -496,13 +491,21 @@ void TypeCheckingFunctionArgument(struct TypeChecking *self,struct ASTFunctionAr
     TypeCheckingBuildLayout(self,argument->type);
 
 
-    struct String ident     = argument->ident.value;
+    struct String ident     = argument->ident->value;
     struct String trueIdent = ident;
 
-    struct Symbol *symbol = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct Symbol,1);
-    SymbolNew(symbol,SYMBOL_VARIABLE,ident,trueIdent,argument->type);
     
-    HashMapAdd(&self->symbols,ident.data,ident.size,symbol);
+
+    struct ModuleSymbol *symbol = HashMapGet(&self->symbols,ident.data,ident.size);
+
+    if(ACHIOR_LABS_NULL(symbol))
+    {
+        puts("NULL symbol function argument ");
+        //exit(1);
+        return;
+    }
+    
+    symbol->type  = argument->type;
 }
 
 
@@ -524,46 +527,46 @@ void TypeCheckingStmt(struct TypeChecking *self,struct ASTStatement *stmt)
         return;
     }
 
-	switch(stmt->type)
+	switch(ASTSTATEMENT_GET_KIND(*stmt))
 	{
 		case AST_STATEMENT_RETURN:
 		{
-            TypeCheckingReturnStmt(self,stmt->stmt);
+            TypeCheckingReturnStmt(self,ASTSTATEMENT_GET_STMT(*stmt));
 			break;
 		}
         case AST_STATEMENT_LOOP:
 		{
-            TypeCheckingLoopStmt(self,stmt->stmt);
+            TypeCheckingLoopStmt(self,ASTSTATEMENT_GET_STMT(*stmt));
 			break;
 		}
         case AST_STATEMENT_WHILE:
 		{
-            TypeCheckingWhileStmt(self,stmt->stmt);
+            TypeCheckingWhileStmt(self,ASTSTATEMENT_GET_STMT(*stmt));
 			break;
 		}
         case AST_STATEMENT_BREAK:
 		{
-            TypeCheckingBreakStmt(self,stmt->stmt);
+            TypeCheckingBreakStmt(self,ASTSTATEMENT_GET_STMT(*stmt));
 			break;
 		}
         case AST_STATEMENT_CONTINUE:
 		{
-            TypeCheckingContinueStmt(self,stmt->stmt);
+            TypeCheckingContinueStmt(self,ASTSTATEMENT_GET_STMT(*stmt));
 			break;
 		}
         case AST_STATEMENT_IF:
 		{
-            TypeCheckingIfStmt(self,stmt->stmt);
+            TypeCheckingIfStmt(self,ASTSTATEMENT_GET_STMT(*stmt));
 			break;
 		}
         case AST_STATEMENT_VAR_DECL:
 		{
-            TypeCheckingVariableDeclStmt(self,stmt->stmt);
+            TypeCheckingVariableDeclStmt(self,ASTSTATEMENT_GET_STMT(*stmt));
 			break;
 		}
         case AST_STATEMENT_EXPRESSION:
 		{
-            TypeCheckingExpressionStmt(self,stmt->stmt);
+            TypeCheckingExpressionStmt(self,ASTSTATEMENT_GET_STMT(*stmt));
 			break;
 		}
 		default:
@@ -598,7 +601,7 @@ void TypeCheckingVariableDeclStmt(struct TypeChecking *self,struct ASTVariableDe
     }
 
 
-    bool status = TypeCheckingType(self,stmt->type);
+    bool status = TypeCheckingType(self,ASTVARIABLEDECL_GET_TYPE(*stmt));
     
     if(ACHIOR_LABS_FALSE(status))
     {
@@ -607,16 +610,23 @@ void TypeCheckingVariableDeclStmt(struct TypeChecking *self,struct ASTVariableDe
     }
 
 
-    TypeCheckingBuildLayout(self,stmt->type);
+    TypeCheckingBuildLayout(self,ASTVARIABLEDECL_GET_TYPE(*stmt));
 
 
-    struct String ident     = stmt->ident.value;
+    struct String ident     = stmt->ident->value;
     struct String trueIdent = ident;
 
-    struct Symbol *symbol = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct Symbol,1);
-    SymbolNew(symbol,SYMBOL_VARIABLE,ident,trueIdent,stmt->type);
-    
-    HashMapAdd(&self->symbols,ident.data,ident.size,symbol);
+
+    struct ModuleSymbol *symbol = HashMapGet(&self->symbols,ident.data,ident.size);
+
+    if(ACHIOR_LABS_NULL(symbol))
+    {
+        puts("NULL symbol variable declaration ");
+        return;
+        exit(1);
+    }
+
+    symbol->type  = ASTVARIABLEDECL_GET_TYPE(*stmt);
 
 
     if(ACHIOR_LABS_NOT_NULL(stmt->init))
@@ -634,7 +644,7 @@ void TypeCheckingVariableDeclInit(struct TypeChecking *self,struct ASTVariableDe
         return;
     }
 
-    switch(init->initType)
+    switch(ASTVARIABLEDECLINIT_GET_INITKIND(*init))
     {
         case AST_VAR_DECL_INIT_SINGLE_INIT:
         {
@@ -679,10 +689,10 @@ void TypeCheckingIfStmt(struct TypeChecking *self,struct ASTIfStmt *stmt)
         TypeCheckingBlockStmt(self,Elif->block);
     }
 
-    if(ACHIOR_LABS_NOT_NULL(stmt->else_block))
+    if(ACHIOR_LABS_NOT_NULL(stmt->elseBlock))
     {
         
-        TypeCheckingBlockStmt(self,stmt->else_block->block);
+        TypeCheckingBlockStmt(self,stmt->elseBlock->block);
     }
 }
 
@@ -751,7 +761,7 @@ void TypeCheckingExpression(struct TypeChecking *self,struct ASTExpression *expr
     }
     
 
-	switch(expr->type)
+	switch(ASTEXPRESSION_GET_KIND(*expr))
     {
         case AST_EXPRESSION_LITERAL:
         {
@@ -764,6 +774,13 @@ void TypeCheckingExpression(struct TypeChecking *self,struct ASTExpression *expr
         {
             struct ASTVariableExpr *innerExpr = (struct ASTVariableExpr *)expr->expr;
             TypeCheckingVariableExpr(self,innerExpr);
+            expr->dataType = innerExpr->dataType;
+            break;
+        }
+        case AST_EXPRESSION_PAREN:
+        {
+            struct ASTParenExpr *innerExpr = (struct ASTParenExpr *)expr->expr;
+            TypeCheckingParenExpr(self,innerExpr);
             expr->dataType = innerExpr->dataType;
             break;
         }
@@ -882,7 +899,7 @@ void TypeCheckingExpression(struct TypeChecking *self,struct ASTExpression *expr
         case AST_EXPRESSION_STRUCT_POINTER_ACCESS:
         {
             struct ASTStructPointerAccessExpr *innerExpr = (struct ASTStructPointerAccessExpr *)expr->expr;
-            //TypeCheckingStructPointerAccessExpr(self,innerExpr);
+            TypeCheckingStructPointerAccessExpr(self,innerExpr);
             expr->dataType = innerExpr->dataType;
             break;
         }
@@ -907,9 +924,7 @@ void TypeCheckingExpression(struct TypeChecking *self,struct ASTExpression *expr
 
 void TypeCheckingMethodExpr(struct TypeChecking *self,struct ASTMethodExpr *expr)
 {
-    puts("hm");
     TypeCheckingExpression(self,expr->lhs);
-    return;
 
     for(u64 i = 0; i < expr->arguments.len; i++)
     {
@@ -917,219 +932,178 @@ void TypeCheckingMethodExpr(struct TypeChecking *self,struct ASTMethodExpr *expr
         TypeCheckingExpression(self,argument);
     }
 
-    /**
-    switch(expr->lhs->dataType->dataType)
+    //puts("oi");
+    //puts(expr->member->value.data);
+
+    if(ACHIOR_LABS_NULL(expr->lhs))
     {
-        case AST_DATA_TYPE_STRUCT:
-        {
-            switch(expr->lhs->type)
-            {
-                case AST_EXPRESSION_VARIABLE:
-                {
-                    struct ASTType *type             = expr->lhs->dataType;
-                    struct ASTStructType *structType = type->type;
-
-                    struct String structIdent        = structType->ident.value;
-
-                    struct Symbol *symbol            = HashMapGet(&self->symbols,structIdent.data,structIdent.size);
-
-                    if(ACHIOR_LABS_NULL(symbol))
-                    {
-                        puts(" struct access on an unknown struct type is illegal ");
-                        //exit(2);
-                    }
-
-                    if(ACHIOR_LABS_NOT_EQUAL(symbol->kind,SYMBOL_STRUCT))
-                    {
-                        puts(" struct access on a non-struct type is illegal ");
-                        //exit(2);
-                    }
-
-                    struct StructEntry structEntry        = symbol->entry;
-                    struct String memberIdent             = expr->member.value;
-                    struct StructMemberEntry *memberEntry = HashMapGet(&structEntry.members,memberIdent.data,memberIdent.size);
-
-                    if(ACHIOR_LABS_NULL(memberEntry))
-                    {
-                        puts("trying to access an undeclared member on a struct type is illegal ");
-                        //exit(9);
-                    }
-
-                    //printf("member.offset : %lu\n",member.offset);
-
-                    expr->dataType  = memberEntry->type;
-                    expr->offset    = memberEntry->offset;
-
-                    //printf("member.offset : %lu\n",expr->offset);
-
-                    break;
-                }
-                default:
-                {
-                    break;
-                }
-            }
-            break;
-        }
-        default:
-        {
-            puts("attempting to . (struct access) on a non-struct type is invalid ");
-            //return NULL;
-            break;
-        }
+        puts("null lhs");
     }
 
-    */
-    //return expr->dataType;
+    if(ACHIOR_LABS_NOT_NULL(expr->lhs->dataType))
+    {
+        //printf("%d [ 8 =>  type]\n",expr->lhs->dataType->dataType);
+    }
+    else
+    {
+        printf("%d [  =>  type]\n",expr->lhs->kind);
+    }
+
+    if(ACHIOR_LABS_NULL(expr->symbol))
+    {
+        //puts("NNNNNNNNNNNNN");
+        //exit(8);
+    }
 }
-
-
-
-
-
 
 
 
 void TypeCheckingStructPointerAccessExpr(struct TypeChecking *self,struct ASTStructPointerAccessExpr *expr)
 {
-    TypeCheckingExpression(self,expr->lhs);
-    switch(expr->lhs->dataType->dataType)
+    if(ACHIOR_LABS_NULL(expr))
     {
-        case AST_DATA_TYPE_STRUCT:
-        {
-            puts("ai");
-            switch(expr->lhs->type)
-            {
-                case AST_EXPRESSION_VARIABLE:
-                {
-                    struct ASTType *type             = expr->lhs->dataType;
-                    struct ASTStructType *structType = type->type;
-
-                    struct String structIdent        = structType->ident.value;
-
-                    struct Symbol *symbol            = HashMapGet(&self->symbols,structIdent.data,structIdent.size);
-
-                    if(ACHIOR_LABS_NULL(symbol))
-                    {
-                        puts(" struct access on an unknown struct type is illegal ");
-                        //exit(2);
-                    }
-
-                    if(ACHIOR_LABS_NOT_EQUAL(symbol->kind,SYMBOL_STRUCT))
-                    {
-                        puts(" struct access on a non-struct type is illegal ");
-                        //exit(2);
-                    }
-
-                    struct StructEntry structEntry        = symbol->entry;
-                    struct String memberIdent             = expr->member.value;
-                    struct StructMemberEntry *memberEntry = HashMapGet(&structEntry.members,memberIdent.data,memberIdent.size);
-
-                    if(ACHIOR_LABS_NULL(memberEntry))
-                    {
-                        puts("trying to access an undeclared member on a struct type is illegal ");
-                        //exit(9);
-                    }
-
-                    //printf("member.offset : %lu\n",member.offset);
-
-                    expr->dataType  = memberEntry->type;
-                    expr->offset    = memberEntry->offset;
-
-                    //printf("member.offset : %lu\n",expr->offset);
-
-                    break;
-                }
-                default:
-                {
-                    break;
-                }
-            }
-            break;
-        }
-        default:
-        {
-            puts("attempting to . (struct access) on a non-struct type is invalid ");
-            //return NULL;
-            break;
-        }
+        return;
     }
 
-    //return expr->dataType;
+    TypeCheckingExpression(self,expr->lhs);
+
+    if(ACHIOR_LABS_NULL(expr->lhs->dataType))
+    {
+        puts("pointer access on expression with no type");
+        return;
+    }
+
+    struct ASTType *lhsType = expr->lhs->dataType;
+
+    if(lhsType->dataType != AST_DATA_TYPE_POINTER)
+    {
+        puts("-> used on non-pointer type");
+        return;
+    }
+
+    struct ASTPointerType *ptrType = (struct ASTPointerType *)lhsType->type;
+
+    if(ACHIOR_LABS_NULL(ptrType))
+    {
+        puts("invalid pointer type");
+        return;
+    }
+
+    struct ASTType *innerType = ptrType->type;
+
+    if(innerType->dataType != AST_DATA_TYPE_STRUCT)
+    {
+        puts("-> used on non-struct pointer");
+        return;
+    }
+
+    struct ASTStructType *structType = (struct ASTStructType *)innerType->type;
+
+    struct Module *module = self->module;
+
+    if(ACHIOR_LABS_NOT_NULL(structType->module))
+    {
+        module = structType->module;
+    }
+
+    struct String structIdent = TOKEN_GET_VALUE(*(structType->ident));
+
+    struct ModuleSymbol *symbol = HashMapGet(&module->symbols,structIdent.data,structIdent.size);
+
+    if(ACHIOR_LABS_NULL(symbol))
+    {
+        puts("unknown struct type");
+        return;
+    }
+
+    struct ModuleStructEntry *structEntry = &symbol->entry;
+
+    struct String memberIdent = expr->member->value;
+
+    struct ModuleStructMemberEntry *memberEntry = HashMapGet(&structEntry->members,memberIdent.data,memberIdent.size);
+
+    if(ACHIOR_LABS_NULL(memberEntry))
+    {
+        puts("unknown struct member");
+        return;
+    }
+
+    expr->offset   = memberEntry->offset;
+    expr->dataType = memberEntry->type;
 }
-
-
-
-
-
 
 
 void TypeCheckingStructAccessExpr(struct TypeChecking *self,struct ASTStructAccessExpr *expr)
 {
-    TypeCheckingExpression(self,expr->lhs);
-    switch(expr->lhs->dataType->dataType)
+    if(ACHIOR_LABS_NULL(expr))
     {
-        case AST_DATA_TYPE_STRUCT:
-        {
-            puts("ai");
-            switch(expr->lhs->type)
-            {
-                case AST_EXPRESSION_VARIABLE:
-                {
-                    struct ASTType *type             = expr->lhs->dataType;
-                    struct ASTStructType *structType = type->type;
-
-                    struct String structIdent        = structType->ident.value;
-
-                    struct Symbol *symbol            = HashMapGet(&self->symbols,structIdent.data,structIdent.size);
-
-                    if(ACHIOR_LABS_NULL(symbol))
-                    {
-                        puts(" struct access on an unknown struct type is illegal ");
-                        //exit(2);
-                    }
-
-                    if(ACHIOR_LABS_NOT_EQUAL(symbol->kind,SYMBOL_STRUCT))
-                    {
-                        puts(" struct access on a non-struct type is illegal ");
-                        //exit(2);
-                    }
-
-                    struct StructEntry structEntry        = symbol->entry;
-                    struct String memberIdent             = expr->member.value;
-                    struct StructMemberEntry *memberEntry = HashMapGet(&structEntry.members,memberIdent.data,memberIdent.size);
-
-                    if(ACHIOR_LABS_NULL(memberEntry))
-                    {
-                        puts("trying to access an undeclared member on a struct type is illegal ");
-                        //exit(9);
-                    }
-
-                    //printf("member.offset : %lu\n",member.offset);
-
-                    expr->dataType  = memberEntry->type;
-                    expr->offset    = memberEntry->offset;
-
-                    //printf("member.offset : %lu\n",expr->offset);
-
-                    break;
-                }
-                default:
-                {
-                    break;
-                }
-            }
-            break;
-        }
-        default:
-        {
-            puts("attempting to . (struct access) on a non-struct type is invalid ");
-            //return NULL;
-            break;
-        }
+        return;
     }
 
-    //return expr->dataType;
+    // First typecheck lhs
+    TypeCheckingExpression(self,expr->lhs);
+
+    if(ACHIOR_LABS_NULL(expr->lhs->dataType))
+    {
+        puts("struct access on expression with no type");
+        return;
+    }
+
+    struct ASTType *lhsType = expr->lhs->dataType;
+
+    // Must be a struct
+    if(lhsType->dataType != AST_DATA_TYPE_STRUCT)
+    {
+        puts("attempting struct access on non-struct type");
+        return;
+    }
+
+    struct ASTStructType *structType = (struct ASTStructType *)lhsType->type;
+
+    if(ACHIOR_LABS_NULL(structType))
+    {
+        puts("invalid struct type");
+        return;
+    }
+
+    struct Module *module = self->module;
+
+    if(ACHIOR_LABS_NOT_NULL(structType->module))
+    {
+        module = structType->module;
+    }
+
+    struct String structIdent = TOKEN_GET_VALUE(*(structType->ident));
+
+    struct ModuleSymbol *symbol = HashMapGet(&module->symbols,structIdent.data,structIdent.size);
+
+    if(ACHIOR_LABS_NULL(symbol))
+    {
+        puts("unknown struct type");
+        return;
+    }
+
+    if(symbol->kind != MODULE_SYMBOL_STRUCT)
+    {
+        puts("type is not a struct");
+        return;
+    }
+
+    struct ModuleStructEntry *structEntry = &symbol->entry;
+
+    struct String memberIdent = expr->member->value;
+
+    struct ModuleStructMemberEntry *memberEntry = HashMapGet(&structEntry->members,memberIdent.data,memberIdent.size);
+
+    if(ACHIOR_LABS_NULL(memberEntry))
+    {
+        puts("unknown struct member");
+        puts(memberIdent.data);
+        return;
+    }
+
+    expr->offset   = memberEntry->offset;
+    expr->dataType = memberEntry->type;
 }
 
 
@@ -1326,7 +1300,7 @@ void TypeCheckingFunctionCallExpr(struct TypeChecking *self,struct ASTFunctionCa
         return;
     }
 
-    if(ACHIOR_LABS_NOT_EQUAL(expr->base->type,AST_EXPRESSION_VARIABLE))
+    if(ACHIOR_LABS_NOT_EQUAL(expr->base->kind,AST_EXPRESSION_VARIABLE))
     {
         puts("expected an identifier as the function name [error]");
         //exit(3);
@@ -1335,19 +1309,19 @@ void TypeCheckingFunctionCallExpr(struct TypeChecking *self,struct ASTFunctionCa
     TypeCheckingExpression(self,expr->base);    
 
     struct ASTVariableExpr *variableExpr = ((struct ASTVariableExpr *)expr->base->expr);
-    struct String ident                  = variableExpr->ident.value;
-    struct Symbol *symbol                = HashMapGet(&self->symbols,ident.data,ident.size);
+    struct String ident                  = variableExpr->ident->value;
+    struct ModuleSymbol *symbol                = HashMapGet(&self->symbols,ident.data,ident.size);
 
     if(ACHIOR_LABS_NULL(symbol))
     {
         puts("unknown function identifier");
-        //exit(3);
+        exit(3);
     }
 
-    if(ACHIOR_LABS_NOT_EQUAL(symbol->kind,SYMBOL_FUNCTION))
+    if(ACHIOR_LABS_NOT_EQUAL(symbol->kind,MODULE_SYMBOL_FUNCTION))
     {
         puts("non-function identifier used as a function");
-        //exit(3);
+        exit(3);
     }
 
 
@@ -1437,6 +1411,22 @@ void TypeCheckingUnaryExpr(struct TypeChecking *self,struct ASTUnaryExpr *expr)
 }
 
 
+
+void TypeCheckingParenExpr(struct TypeChecking *self,struct ASTParenExpr *expr)
+{
+    if( ACHIOR_LABS_NULL(expr))
+    {
+        return;
+    }
+    
+    TypeCheckingExpression(self,expr->expr);
+
+    expr->dataType = expr->expr->dataType;
+
+}
+
+
+
 void TypeCheckingVariableExpr(struct TypeChecking *self,struct ASTVariableExpr *expr)
 {
     if( ACHIOR_LABS_NULL(expr))
@@ -1445,21 +1435,16 @@ void TypeCheckingVariableExpr(struct TypeChecking *self,struct ASTVariableExpr *
     }
 
 
-    struct String ident   = expr->ident.value;
-    struct Symbol *symbol = HashMapGet(&self->symbols,ident.data,ident.size);
+    struct String ident   = expr->ident->value;
+    struct ModuleSymbol *symbol = HashMapGet(&self->symbols,ident.data,ident.size);
 
     if(ACHIOR_LABS_NULL(symbol))
     {
         puts("illegal use of an undeclared variable identifier : [error]");
-        //exit(2);
+
         return;
     }
-
-    if(ACHIOR_LABS_NOT_EQUAL(symbol->kind,SYMBOL_VARIABLE))
-    {
-        puts("non-variable identifier used as a variable");
-        //exit(3);
-    }
+    
 
     expr->dataType = symbol->type;
 
@@ -1479,9 +1464,9 @@ void TypeCheckingLiteralExpr(struct TypeChecking *self,struct ASTLiteralExpr *ex
         return;
     }
 
-    enum ASTLiteralType type = AST_LITERAL_NONE;
+    enum ASTLiteralKind type = AST_LITERAL_NONE;
 
-    switch(expr->type)
+    switch(ASTEXPRESSION_GET_KIND(*expr))
     {
         case AST_LITERAL_CHARACTER:
         {
@@ -1587,7 +1572,7 @@ struct Layout TypeCheckingGetBuiltInLayout(struct TypeChecking *self,enum ASTDat
 
 bool TypeCheckingIsLvalue(struct TypeChecking *self,struct ASTExpression *expr)
 {
-    switch(expr->type)
+    switch(ASTEXPRESSION_GET_KIND(*expr))
     {
         case AST_EXPRESSION_VARIABLE:
         case AST_EXPRESSION_STRUCT_ACCESS:

@@ -11,7 +11,7 @@
 #include "../../TypeChecking/Include/TypeChecking.h"
 
 
-struct Parser FrontEndDriverRun(struct C4CFrontEndOptions *options,struct BumpAllocator *bump);
+struct LinkedList FrontEndDriverRun(struct C4CFrontEndOptions *options,struct DiagnosticEngine *engine,struct BumpAllocator *bump);
 
 
 

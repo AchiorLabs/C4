@@ -246,7 +246,8 @@ bool HashMapAdd(struct HashMap *self,const void *key,u64 len,void *value)
     }
 
     node->hash = hash;
-    node->key  = ACHIOR_LABS_ARENA_ALLOC(self->bump,char,len);
+    node->key  = ACHIOR_LABS_ARENA_ALLOC(self->bump,char,len + 2);
+    ACHIOR_LABS_MEMSET(node->key,0,len + 2);
 
     if(ACHIOR_LABS_NULL(node->key))
     {

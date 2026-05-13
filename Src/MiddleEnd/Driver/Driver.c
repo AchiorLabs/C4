@@ -2,7 +2,7 @@
 
 
 
-void MiddleEndDriverRun(struct C4CMiddleEndOptions *options,struct ASTProgram *program,struct BumpAllocator *bump)
+void MiddleEndDriverRun(struct C4CMiddleEndOptions *options,struct LinkedList modules,struct BumpAllocator *bump)
 {
 	if(ACHIOR_LABS_TRUE(options->emit_c))
 	{
@@ -10,6 +10,6 @@ void MiddleEndDriverRun(struct C4CMiddleEndOptions *options,struct ASTProgram *p
 		ACHIOR_LABS_SNPRINTF(buf,sizeof(buf),"%s.%s",options->output_file_name,"c");
 
 		struct ASTToC C;
-		ASTToCNew(&C,program,buf,bump);
+		ASTToCNew(&C,modules,buf,bump);
 	}
 }

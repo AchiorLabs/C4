@@ -2,59 +2,14 @@
 #define ACHIOR_LABS_FRONTEND_TYPECHECKING_H
 
 #include "../../AST/Include/AST.h"
-
-
-enum SymbolKind
-{
-    SYMBOL_NONE,
-    SYMBOL_FUNCTION,
-    SYMBOL_STRUCT,
-    SYMBOL_VARIABLE,
-};
-
-
-struct StructMemberEntry
-{
-    struct String ident;
-    struct ASTType *type;
-    u64 offset;
-};
-
-
-bool StructMemberEntryNew(struct StructMemberEntry *self,struct String ident,struct ASTType *type,u64 offset);
-
-
-
-struct StructEntry
-{
-    struct String ident;
-    struct Layout layout;
-    struct HashMap members;
-};
-
-
-bool StructEntryNew(struct StructEntry *self,struct String i64,struct Layout layout,struct HashMap members);
-
-
-struct Symbol
-{
-    enum SymbolKind kind;
-    struct String ident;
-    struct String trueIdent;
-    struct ASTType *type;
-    struct StructEntry entry;
-};
-
-
-bool SymbolNew(struct Symbol *self,enum SymbolKind kind,struct String ident,struct String trueIdent,struct ASTType *type);
-
-
+#include "../../ModuleSystem/Include/Module.h"
 
 
 
 
 struct TypeChecking
 {
+    struct Module *module;
     struct ASTProgram *program;
     u64 globalCounter;
     struct HashMap symbols;
@@ -62,7 +17,7 @@ struct TypeChecking
 };
 
 
-bool TypeCheckingNew(struct TypeChecking *self,struct ASTProgram *program,u64 globalCounter,struct BumpAllocator *bump);
+bool TypeCheckingNew(struct TypeChecking *self,struct Module *module,u64 globalCounter,struct BumpAllocator *bump);
 
 bool TypeCheckingType(struct TypeChecking *self,struct ASTType *type);
 
@@ -144,6 +99,8 @@ void TypeCheckingAssignmentExpr(struct TypeChecking *self,struct ASTAssignmentEx
 void TypeCheckingBinaryExpr(struct TypeChecking *self,struct ASTBinaryExpr *expr);
 
 void TypeCheckingUnaryExpr(struct TypeChecking *self,struct ASTUnaryExpr *expr);
+
+void TypeCheckingParenExpr(struct TypeChecking *self,struct ASTParenExpr *expr);
 
 void TypeCheckingVariableExpr(struct TypeChecking *self,struct ASTVariableExpr *expr);
 

@@ -29,7 +29,8 @@ enum log_color
 
 enum log_level
 {
-    LOG_LEVEL_TRACE = 0,
+    LOG_LEVEL_NONE,
+    LOG_LEVEL_TRACE,
     LOG_LEVEL_DEBUG,
     LOG_LEVEL_INFO,
     LOG_LEVEL_WARN,

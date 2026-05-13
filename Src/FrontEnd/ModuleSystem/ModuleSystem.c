@@ -1,73 +1,8 @@
 #include "Include/ModuleSystem.h"
+#include "../IdentifierResolution/Include/IdentifierResolution.h"
+#include "../TypeChecking/Include/TypeChecking.h"
 
-
-
-bool ModuleNew(struct Module *self,struct String fullPath,struct ASTProgram *ast,struct HashMap imports,struct HashMap symbols)
-{
-    if(ACHIOR_LABS_NULL(self))
-    {
-        return false;
-    }
-
-    self->fullPath = fullPath;
-    self->ast      = ast;
-    self->imports  = imports;
-    self->symbols  = symbols;
-
-    return true;
-}
-
-
-
-bool ModuleImportNew(struct ModuleImport *self,struct Token alias,struct String targetPath,struct Module *target)
-{
-    if(ACHIOR_LABS_NULL(self))
-    {
-        return false;
-    }
-
-    self->alias      = alias;
-    self->targetPath = targetPath;
-    self->target     = target;
-
-    return true;
-}
-
-
-
-bool ModuleRegistryNew(struct ModuleRegistry *self,struct HashMap modules)
-{
-    if(ACHIOR_LABS_NULL(self))
-    {
-        return false;
-    }
-
-    self->modules = modules;
-
-    return true;
-}
-
-
-
-
-bool FileTreeNodeNew(struct FileTreeNode *self,enum FileTreeNodeType type,struct String name,struct String fullPath,struct LinkedList children)
-{
-    if(ACHIOR_LABS_NULL(self))
-    {
-        return false;
-    }
-
-    self->type     = type;
-    self->name     = name;
-    self->fullPath = fullPath;
-    self->children = children;
-
-    return true;
-}
-
-
-
-bool ModuleSystemNew(struct ModuleSystem *self,struct BumpAllocator *bump,struct C4CFrontEndOptions *options)
+bool ModuleSystemNew(struct ModuleSystem *self,struct DiagnosticEngine *engine,struct BumpAllocator *bump,struct C4CFrontEndOptions *options)
 {
     if(ACHIOR_LABS_NULL(self))
     {
@@ -76,6 +11,9 @@ bool ModuleSystemNew(struct ModuleSystem *self,struct BumpAllocator *bump,struct
 
     self->bump    = bump;
     self->options = options;
+    self->engine  = engine;
+
+    LinkedListNew(&self->order,self->bump);
 
     ModuleSystemDiscoverFiles(self);
 
@@ -84,7 +22,7 @@ bool ModuleSystemNew(struct ModuleSystem *self,struct BumpAllocator *bump,struct
 }
 
 
-struct String StringFromCString(struct ModuleSystem *self, const char *text)
+struct String StringFromCString(struct ModuleSystem *self,const char *text)
 {
     struct String string = {0};
 
@@ -109,21 +47,20 @@ struct String GetBaseName(struct ModuleSystem *self,const char *path)
         return string;
     }
 
-    const char *lastSlash = strrchr(path, '/');
+    const char *lastSlash = strrchr(path,'/');
 
-    /*
-    Linux/macOS uses '/'
-    Windows may use '\\'
-    */
+    
+    // Linux/macOS uses '/'
+    // Windows may use '\\'
 
-    const char *lastBackslash = strrchr(path, '\\');
+    const char *lastBackslash = strrchr(path,'\\');
 
     if (lastBackslash != NULL && (lastSlash == NULL || lastBackslash > lastSlash))
     {
         lastSlash = lastBackslash;
     }
 
-    const char *baseName;
+    const char *baseName = NULL;
 
     if (lastSlash == NULL)
     {
@@ -134,11 +71,11 @@ struct String GetBaseName(struct ModuleSystem *self,const char *path)
         baseName = lastSlash + 1;
     }
 
-    return StringFromCString(self, baseName);
+    return StringFromCString(self,baseName);
 }
 
 
-char *JoinPath(struct ModuleSystem *self,const char *parent, const char *child)
+char *JoinPath(struct ModuleSystem *self,const char *parent,const char *child)
 {
     if (parent == NULL || child == NULL)
     {
@@ -173,7 +110,7 @@ char *JoinPath(struct ModuleSystem *self,const char *parent, const char *child)
     u64 index = 0;
 
     /* copy parent */
-    ACHIOR_LABS_MEMCPY(result + index, parent, parentLength);
+    ACHIOR_LABS_MEMCPY(result + index,parent,parentLength);
     index += parentLength;
 
     /* add separator if needed */
@@ -184,7 +121,7 @@ char *JoinPath(struct ModuleSystem *self,const char *parent, const char *child)
     }
 
     /* copy child */
-    ACHIOR_LABS_MEMCPY(result + index, child, childLength);
+    ACHIOR_LABS_MEMCPY(result + index,child,childLength);
     index += childLength;
 
     /* null terminator */
@@ -194,7 +131,7 @@ char *JoinPath(struct ModuleSystem *self,const char *parent, const char *child)
 }
 
 
-bool EndsWith(const char *str, const char *suffix)
+bool EndsWith(const char *str,const char *suffix)
 {
     if (str == NULL || suffix == NULL)
     {
@@ -211,7 +148,7 @@ bool EndsWith(const char *str, const char *suffix)
 
     const char *strSuffix = str + (strLen - suffixLen);
 
-    return strcmp(strSuffix, suffix) == 0;
+    return strcmp(strSuffix,suffix) == 0;
 }
 
 
@@ -256,7 +193,7 @@ struct FileTreeNode *ModuleSystemDiscoverDirectory(struct ModuleSystem *self,con
         char *fullPathName = JoinPath(self,path,dirent->d_name);
 
         struct stat statBuffer;
-        if (stat(fullPathName, &statBuffer) != 0)
+        if (stat(fullPathName,&statBuffer) != 0)
         {
             continue;
         }
@@ -292,11 +229,23 @@ struct FileTreeNode *ModuleSystemDiscoverDirectory(struct ModuleSystem *self,con
 void ModuleSystemDiscoverFiles(struct ModuleSystem *self)
 {
     struct FileTreeNode *fileTree = ModuleSystemDiscoverDirectory(self,"src");
-    ModuleSystemFileTreeNodePrint(fileTree,0);
+    //ModuleSystemFileTreeNodePrint(fileTree,0);
     self->registry                = ModuleSystemCreateModuleRegistry(self,fileTree);
 
     ModuleSystemCollectAllImports(self,fileTree);
     ModuleSystemResolveAllImports(self);
+
+    if (!ModuleSystemBuildTopologicalOrder(self))
+    {
+        printf("Compilation aborted due to import cycle.\n");
+        return;
+    }
+
+    //ModuleSystemPrintModules(self);
+    ModuleSystemRegisterAllSymbols(self);
+    ModuleSystemResolveSymbolAllIdentifiers(self);
+
+    ModuleSystemTypeCheckAll(self);
 }
 
 
@@ -327,40 +276,40 @@ void ModuleSystemFileTreeNodePrint(struct FileTreeNode *node,int depth)
     /* print node name */
     if (node->type == FILE_TREE_NODE_DIRECTORY)
     {
-        printf("[DIR ]\t%s (%s)\n", node->name.data, node->fullPath.data);
+        printf("[DIR ]\t%s (%s)\n",node->name.data,node->fullPath.data);
         for(u64 i = 0; i < node->children.len; i++)
         {
             struct FileTreeNode *child = LinkedListAt(&node->children,i);
-            ModuleSystemFileTreeNodePrint(child, depth + 1);
+            ModuleSystemFileTreeNodePrint(child,depth + 1);
         }
     }
     else
     {
-        printf("[FILE]\t%s (%s)\n", node->name.data, node->fullPath.data);
+        printf("[FILE]\t%s (%s)\n",node->name.data,node->fullPath.data);
     }
 }
 
 
 
-struct String ModuleSystemFilePathToModulePath(struct ModuleSystem *self,const char *filePath)
+struct String ModuleSystemFilePathToModulePath(struct BumpAllocator *bump,const char *filePath)
 {
     struct String pathString = {0};
 
-    if (self == NULL || filePath == NULL)
+    if (bump == NULL || filePath == NULL)
     {
         return pathString;
     }
 
     const char *start = filePath;
 
-    if (strncmp(filePath, "src/", 4) == 0)
+    if (strncmp(filePath,"src/",4) == 0)
     {
         start = filePath + 4;
     }
 
     size_t len = strlen(start);
 
-    if (len >= 3 && strcmp(start + len - 3, ".c4") == 0)
+    if (len >= 3 && strcmp(start + len - 3,".c4") == 0)
     {
         len -= 3;
     }
@@ -375,7 +324,7 @@ struct String ModuleSystemFilePathToModulePath(struct ModuleSystem *self,const c
         }
     }
 
-    StringNew(&pathString, len + extra + 1, self->bump);
+    StringNew(&pathString,len + extra + 1,bump);
 
     size_t j = 0;
     for (size_t i = 0; i < len; i++)
@@ -400,6 +349,49 @@ struct String ModuleSystemFilePathToModulePath(struct ModuleSystem *self,const c
 }
 
 
+bool ModuleSystemSplitPath(struct BumpAllocator *bump,const char *path,char **directory,char **fileName)
+{
+
+    const char *lastSlash = strrchr(path,'/');
+
+    if (lastSlash)
+    {
+        u64 directoryLength = (u64)(lastSlash - path);
+        *directory          = ACHIOR_LABS_ARENA_ALLOC(bump,char,directoryLength + 1);
+
+        ACHIOR_LABS_STRNCPY(*directory,path,directoryLength);
+        (*directory)[directoryLength] = '\0';
+
+        u64 fileNameLength  = ACHIOR_LABS_STRLEN(lastSlash + 1);
+        *fileName           = ACHIOR_LABS_ARENA_ALLOC(bump,char,fileNameLength + 1);
+
+
+        ACHIOR_LABS_STRNCPY(*fileName,lastSlash + 1,fileNameLength);
+        (*fileName)[fileNameLength] = '\0';
+    }
+    else
+    {
+        *directory = NULL;
+
+        u64 fileNameLength  = ACHIOR_LABS_STRLEN(path);
+        *fileName           = ACHIOR_LABS_ARENA_ALLOC(bump,char,fileNameLength + 1);
+
+        ACHIOR_LABS_STRNCPY(*fileName,path,fileNameLength);
+        (*fileName)[fileNameLength] = '\0';
+    }
+
+
+    u64 length = ACHIOR_LABS_STRLEN(*fileName);
+
+    char *dot = strrchr(*fileName,'.');
+    if (dot && ACHIOR_LABS_STRCMP(dot,".c4") == 0)
+    {
+        *dot = '\0';
+    }
+
+    return true;
+}
+
 struct Module *ModuleSystemCreateModule(struct ModuleSystem *self,const char *filePath)
 {
     struct Module *module = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct Module,1);
@@ -408,16 +400,27 @@ struct Module *ModuleSystemCreateModule(struct ModuleSystem *self,const char *fi
         return module;
     }
 
-    struct String fullPath  = ModuleSystemFilePathToModulePath(self,filePath);
-    struct ASTProgram *ast  = ModuleSystemParseFile(self,filePath);
+    ACHIOR_LABS_PTR_INIT(char,fileSource);
+
+    struct String fullPath  = ModuleSystemFilePathToModulePath(self->bump,filePath);
+    struct ASTProgram *ast  = ModuleSystemParseFile(self,filePath,fullPath.data,&fileSource);
+    char *workingDirectory  = ACHIOR_LABS_ARENA_ALLOC(self->bump,char,256);
+    char *directory         = NULL;
+    char *fileName          = NULL;
     struct HashMap imports;
-    struct HashMap symbols; 
+    struct HashMap symbols;
+
+    getcwd(workingDirectory,256);
+    ModuleSystemSplitPath(self->bump,filePath,&directory,&fileName);
 
 
     HashMapNew(&imports,10,self->bump);
     HashMapNew(&symbols,10,self->bump);
-    ModuleNew(module,fullPath,ast,imports,symbols);
+    ModuleNew(module,fullPath,ast,workingDirectory,directory,fileName,imports,symbols);
 
+    module->moduleName   = (char *)filePath;
+    module->moduleSource = fileSource;
+    module->sourceLength = ACHIOR_LABS_STRLEN(fileSource);
 
     return module;
 }
@@ -425,15 +428,15 @@ struct Module *ModuleSystemCreateModule(struct ModuleSystem *self,const char *fi
 
 char *ReadFileToString(char *file_name,struct BumpAllocator *bump);
 
-struct ASTProgram *ModuleSystemParseFile(struct ModuleSystem *self,char *filePath)
+struct ASTProgram *ModuleSystemParseFile(struct ModuleSystem *self,const char *filePath,char *fullPath,char **fileSource)
 {
     struct C4CFrontEndOptions *options = self->options;
     struct BumpAllocator *bump         = self->bump;
 
-    char *fileSource                   = ReadFileToString(filePath,bump);
+    *fileSource                   = ReadFileToString((char *)filePath,bump);
 
     struct Lexer lexer;
-	LexerNew(&lexer,filePath,fileSource,bump);
+	LexerNew(&lexer,(char *)filePath,*fileSource,self->engine,bump);
 
 
 
@@ -446,9 +449,8 @@ struct ASTProgram *ModuleSystemParseFile(struct ModuleSystem *self,char *filePat
 		LexerPrintTokens(&lexer,buf);
 	}
 
-	LexerPrintErrors(&lexer);
 	
-	if(ACHIOR_LABS_TRUE(options->lex_only) || ACHIOR_LABS_TRUE(lexer.has_errors))
+	if(ACHIOR_LABS_TRUE(options->lex_only) || ACHIOR_LABS_TRUE(lexer.hasErrors))
 	{
 		options->lex_only = true;
 		return NULL;
@@ -456,7 +458,7 @@ struct ASTProgram *ModuleSystemParseFile(struct ModuleSystem *self,char *filePat
 
 
 	struct Parser parser;
-	ParserNew(&parser,filePath,lexer.tokens,bump);
+	ParserNew(&parser,(char *)filePath,lexer.fileSource,lexer.tokens,self->engine,bump);
 
     /*
     if(ACHIOR_LABS_TRUE(options->emit_ast))
@@ -473,14 +475,23 @@ struct ASTProgram *ModuleSystemParseFile(struct ModuleSystem *self,char *filePat
 		//TreeWalkerNew(&treeWalker,parser.astProgram,buf);
 		//TreeWalkerProgram(&treeWalker,parser.astProgram);
 	}
+    */
+
 
     if(ACHIOR_LABS_TRUE(parser.hasErrors))
 	{
         puts("--------------------------------- ERROR -------------------------------");
     }
-        */
 
-    puts("--------------------------------------------ParseFile done ------------------------------------------------------");
+    struct IdentifierResolution resolver;
+	IdentifierResolutionNew(&resolver,fullPath,parser.fileSource,parser.astProgram,options->global_counter,self->engine,bump);
+
+	options->global_counter = resolver.globalCounter;
+
+    
+
+
+    //puts("--------------------------------------------ParseFile done ------------------------------------------------------");
     return parser.astProgram;
 }
 
@@ -499,9 +510,10 @@ void ModuleSystemBuildModulesFromFileTree(struct ModuleSystem *self,struct FileT
     if (node->type == FILE_TREE_NODE_FILE)
     {
         struct Module *module   = ModuleSystemCreateModule(self,node->fullPath.data);
-        struct String moduleKey = ModuleSystemFilePathToModulePath(self,node->fullPath.data);
+        struct String moduleKey = ModuleSystemFilePathToModulePath(self->bump,node->fullPath.data);
 
         HashMapAdd(&registry->modules,moduleKey.data,moduleKey.size,module);
+
         return;
     }
 
@@ -521,141 +533,12 @@ struct ModuleRegistry *ModuleSystemCreateModuleRegistry(struct ModuleSystem *sel
     struct ModuleRegistry *registry = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ModuleRegistry,1);
 
     struct HashMap modules;
-    HashMapNew(&modules, 64, self->bump);
+    HashMapNew(&modules,64,self->bump);
 
     ModuleRegistryNew(registry,modules);
 
     ModuleSystemBuildModulesFromFileTree(self,root,registry);
     return registry;
 }
-
-
-
-struct String ModuleSystemPathFromList(struct ModuleSystem *self,struct LinkedList list)
-{
-    struct String path;
-    StringNew(&path,10,self->bump);
-
-    for(u64 i = 0; i < list.len; i++)
-    {
-        char *name = LinkedListAt(&list,i);
-        StringPushBack(&path,name);
-
-        if(ACHIOR_LABS_LESS(i,list.len - 1))
-        {
-            StringPushBack(&path,"::");
-        }
-    }
-
-    return path;
-}
-
-
-
-
-
-bool ModuleSystemCollectImports(struct ModuleSystem *self,struct Module *module)
-{
-    if(ACHIOR_LABS_NULL(self) || ACHIOR_LABS_NULL(module) || ACHIOR_LABS_NULL(module->ast))
-    {
-        return false;
-    }
-
-
-    for(u64 i = 0; i < module->ast->decls.len; i++)
-    {
-        struct ASTDeclaration *decl = LinkedListAt(&module->ast->decls,i);
-        if(ACHIOR_LABS_NOT_EQUAL(decl->type,AST_DECLARATION_USE))
-        {
-            continue;
-        }
-
-
-        struct ASTUseDecl *useDecl  = (struct ASTUseDecl *)decl->decl;
-        struct ModuleImport *import = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ModuleImport,1);
-        struct String fullPath      = ModuleSystemPathFromList(self,useDecl->path);
-
-        ModuleImportNew(import,useDecl->alias,fullPath,NULL);
-
-        HashMapAdd(&module->imports,useDecl->alias.value.data,useDecl->alias.value.size,import);
-    }
-}
-
-
-
-
-bool ModuleSystemCollectAllImports(struct ModuleSystem *self,struct FileTreeNode *fileTree)
-{
-    struct FileTreeNode *newFileTree = fileTree;
-
-    for(u64 i = 0; i < self->registry->modules.capacity; i++)
-    {
-        for (struct HashNode *node = self->registry->modules.buckets[i]; ACHIOR_LABS_NOT_NULL(node); node = node->next)
-        {
-            struct Module *module   = (struct Module *)node->value;
-            if(ACHIOR_LABS_NOT_NULL(module))
-            {
-                //StringPrintln(&module->fullPath);
-            }
-
-            ModuleSystemCollectImports(self,module);
-        }
-    }
-}
-
-
-
-
-
-
-
-bool ModuleSystemResolveImports(struct ModuleSystem *self,struct Module *module)
-{
-
-    for(u64 i = 0; i < module->imports.capacity; i++)
-    {
-        for (struct HashNode *node = module->imports.buckets[i]; ACHIOR_LABS_NOT_NULL(node); node = node->next)
-        {
-            struct ModuleImport *import = (struct ModuleImport *)node->value;
-            if(ACHIOR_LABS_NOT_NULL(import))
-            {
-                //StringPrintln(&module->fullPath);
-            }
-
-            struct Module *target = HashMapGet(&self->registry->modules,import->targetPath.data,import->targetPath.size);
-
-            if (target == NULL)
-            {
-                // error: unknown module
-                continue;
-            }
-
-            import->target = target;
-
-        }
-    }
-}
-
-
-
-
-bool ModuleSystemResolveAllImports(struct ModuleSystem *self)
-{
-
-    for(u64 i = 0; i < self->registry->modules.capacity; i++)
-    {
-        for (struct HashNode *node = self->registry->modules.buckets[i]; ACHIOR_LABS_NOT_NULL(node); node = node->next)
-        {
-            struct Module *module   = (struct Module *)node->value;
-            if(ACHIOR_LABS_NOT_NULL(module))
-            {
-                //StringPrintln(&module->fullPath);
-            }
-
-            ModuleSystemResolveImports(self,module);
-        }
-    }
-}
-
 
 

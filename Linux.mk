@@ -11,10 +11,17 @@ OBJECTS= $(OBJ)/Support/BumpAllocator.o                                         
 		 $(OBJ)/Support/Log.o                                                         \
 		 $(OBJ)/Support/List.o                                                        \
 		 $(OBJ)/Support/HashMap.o                                                     \
-		 $(OBJ)/CmdLine/CmdLineArgumentList.o                                         \
 		 $(OBJ)/CmdLine/CmdLine.o                                                     \
+		 $(OBJ)/DiagnosticEngine/Diagnostic.o                                         \
+		 $(OBJ)/DiagnosticEngine/DiagnosticRenderer.o                                 \
+		 $(OBJ)/DiagnosticEngine/DiagnosticEngine.o                                   \
 		 $(OBJ)/C4COptions/C4COptions.o                                               \
+		 $(OBJ)/FrontEnd/ModuleSystem/Module.o                                        \
 		 $(OBJ)/FrontEnd/ModuleSystem/ModuleSystem.o                                  \
+		 $(OBJ)/FrontEnd/ModuleSystem/ResolveImports.o                                \
+		 $(OBJ)/FrontEnd/ModuleSystem/Register.o                                      \
+		 $(OBJ)/FrontEnd/ModuleSystem/ResolveSymbols.o                                \
+		 $(OBJ)/FrontEnd/ModuleSystem/TopologicalSort.o                               \
 		 $(OBJ)/FrontEnd/Lexer/Token.o                                                \
 		 $(OBJ)/FrontEnd/Lexer/Lexer.o                                                \
 		 $(OBJ)/FrontEnd/AST/AST.o                                                    \
@@ -26,6 +33,7 @@ OBJECTS= $(OBJ)/Support/BumpAllocator.o                                         
 		 $(OBJ)/FrontEnd/Driver/Driver.o                                              \
 		 $(OBJ)/MiddleEnd/C/ASTToC.o                                                  \
 		 $(OBJ)/MiddleEnd/Driver/Driver.o                                             \
+		 $(OBJ)/Output/Output.o                                                       \
 		 $(OBJ)/Driver/Driver.o                                                       \
 
 
@@ -34,7 +42,7 @@ OBJECTS= $(OBJ)/Support/BumpAllocator.o                                         
 
 
 Target/Main: $(OBJECTS) $(SRC)/Main.c
-	$(CC) $^ -o $@
+	$(CC) $^ -o $@ -static
 
 
 $(OBJ)/Support/BumpAllocator.o: $(SRC)/Support/BumpAllocator.c
@@ -58,14 +66,18 @@ $(OBJ)/Support/HashMap.o: $(SRC)/Support/HashMap.c
 
 
 
-
-$(OBJ)/CmdLine/CmdLineArgumentList.o:$(SRC)/CmdLine/CmdLineArgumentList.c
-	$(CC) -c $^ -o $@
-
 $(OBJ)/CmdLine/CmdLine.o:$(SRC)/CmdLine/CmdLine.c
 	$(CC) -c $^ -o $@
 
+$(OBJ)/DiagnosticEngine/Diagnostic.o: $(SRC)/DiagnosticEngine/Diagnostic.c
+	$(CC) -c $^ -o $@
 
+$(OBJ)/DiagnosticEngine/DiagnosticRenderer.o: $(SRC)/DiagnosticEngine/DiagnosticRenderer.c
+	$(CC) -c $^ -o $@
+
+$(OBJ)/DiagnosticEngine/DiagnosticEngine.o: $(SRC)/DiagnosticEngine/DiagnosticEngine.c
+	$(CC) -c $^ -o $@
+	
 
 
 $(OBJ)/C4COptions/C4COptions.o:$(SRC)/C4COptions/C4COptions.c
@@ -73,8 +85,23 @@ $(OBJ)/C4COptions/C4COptions.o:$(SRC)/C4COptions/C4COptions.c
 
 
 
+$(OBJ)/FrontEnd/ModuleSystem/Module.o: $(SRC)/FrontEnd/ModuleSystem/Module.c
+	$(CC) -c $^ -o $@
 
 $(OBJ)/FrontEnd/ModuleSystem/ModuleSystem.o: $(SRC)/FrontEnd/ModuleSystem/ModuleSystem.c
+	$(CC) -c $^ -o $@
+
+$(OBJ)/FrontEnd/ModuleSystem/ResolveImports.o: $(SRC)/FrontEnd/ModuleSystem/ResolveImports.c
+	$(CC) -c $^ -o $@
+
+$(OBJ)/FrontEnd/ModuleSystem/Register.o: $(SRC)/FrontEnd/ModuleSystem/Register.c
+	$(CC) -c $^ -o $@
+
+$(OBJ)/FrontEnd/ModuleSystem/ResolveSymbols.o: $(SRC)/FrontEnd/ModuleSystem/ResolveSymbols.c
+	$(CC) -c $^ -o $@
+
+
+$(OBJ)/FrontEnd/ModuleSystem/TopologicalSort.o: $(SRC)/FrontEnd/ModuleSystem/TopologicalSort.c
 	$(CC) -c $^ -o $@
 
 
@@ -124,6 +151,10 @@ $(OBJ)/MiddleEnd/C/ASTToC.o: $(SRC)/MiddleEnd/C/ASTToC.c
 
 
 $(OBJ)/MiddleEnd/Driver/Driver.o: $(SRC)/MiddleEnd/Driver/Driver.c
+	$(CC) -c $^ -o $@
+
+
+$(OBJ)/Output/Output.o : $(SRC)/Output/Output.c
 	$(CC) -c $^ -o $@
 
 

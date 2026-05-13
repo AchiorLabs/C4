@@ -28,6 +28,8 @@ bool BumpAllocatorNew(struct BumpAllocator *self,u64 capacity)
     self->capacity = capacity;
     self->base = ACHIOR_LABS_MALLOC(capacity);
 
+    ACHIOR_LABS_MEMSET(self->base,0,capacity);
+
     if( ACHIOR_LABS_NULL(self->base))
     {
         return false;
