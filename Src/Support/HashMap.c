@@ -246,7 +246,8 @@ bool HashMapAdd(struct HashMap *self,const void *key,u64 len,void *value)
     }
 
     node->hash = hash;
-    node->key  = ACHIOR_LABS_ARENA_ALLOC(self->bump,char,len);
+    node->key  = ACHIOR_LABS_ARENA_ALLOC(self->bump,char,len + 2);
+    ACHIOR_LABS_MEMSET(node->key,0,len + 2);
 
     if(ACHIOR_LABS_NULL(node->key))
     {
@@ -292,7 +293,7 @@ void *HashMapGet(struct HashMap *self,const void *key,u64 len)
         //DEBUG_PRINT("Being checked against key: ", (char *)key);
         //DEBUG_PRINT("The length of the key is: ",len);
 
-        if (node->keyLength == len && memcmp(node->key, key, len) == 0)
+        if (node->keyLength == len && ACHIOR_LABS_MEMCMP(node->key, key, len) == 0)
         {
             return node->value;
         }
@@ -302,52 +303,6 @@ void *HashMapGet(struct HashMap *self,const void *key,u64 len)
 }
 
 
-/**
- * This function returns a copy of a given hashmap.
- * It takes one parameter:
- * - self -> the map to search the key from
- * 
- * it perforns a deep copy of the self hashmap and return a 
- * copy of it.
- * This function does not perform a deep clean on node creation failure, beware 
- * 
- */
-struct HashMap *HashMapCopy(struct HashMap *self)
-{
-    if(ACHIOR_LABS_NULL(self))
-    {
-        return NULL;
-    }
-
-    size_t sizeOfHashMap            = ACHIOR_LABS_SIZEOF(struct HashMap);
-    struct HashMap hashMapCopy;     
-    bool created                    = HashMapNew(&hashMapCopy, self->capacity,self->bump);
-
-
-    if(! created)
-    {
-        return NULL;
-    }
 
 
 
-    for(u64 i = 0; i < self->capacity; i++) 
-    {
-        struct HashNode *node       = self->buckets[i];
-
-        while(node)
-        {
-            bool nodeCopied         = HashMapAdd(&hashMapCopy,node->key,node->keyLength, node->value);
-
-            if(! nodeCopied)
-            {
-                //should do a total clean up, 
-                ACHIOR_LABS_FREE(&hashMapCopy);
-            }
-            node                    = node->next;
-        }
-    }
-
-
-    return &hashMapCopy;
-}

@@ -6,7 +6,7 @@
 #include "../../C/Include/ASTToC.h"
 
 
-void MiddleEndDriverRun(struct C4CMiddleEndOptions *options,struct ASTProgram *program,struct BumpAllocator *bump);
+void MiddleEndDriverRun(struct C4CMiddleEndOptions *options,struct LinkedList modules,struct BumpAllocator *bump);
 
 
 

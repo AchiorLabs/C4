@@ -126,6 +126,7 @@ struct C4COutputOptions
 {
     enum C4CEmitType emit_type;
     char *output_file_name;
+    struct LinkedList asmFiles;
 };
 
 bool C4COutputOptionsNew(struct C4COutputOptions *self,enum C4CEmitType emit_type,char *output_file_name);

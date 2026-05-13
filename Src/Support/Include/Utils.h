@@ -7,6 +7,10 @@
 
 #include "Types.h"
 
+#include <unistd.h>
+#include <sys/wait.h>
+#include <stdlib.h>
+
 #include <stddef.h>
 #include <stdarg.h>
 

@@ -1,39 +1,34 @@
 #include "Include/Parser.h"
 
 
-bool ParserNew(
-	struct Parser *self,
-	char *file_name,
-	struct TokenList tokens,
-	struct BumpAllocator *bump
-)
+bool ParserNew(struct Parser *self,char *fileName,char *fileSource,struct LinkedList tokens,struct DiagnosticEngine *engine,struct BumpAllocator *bump)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
 		return false;
 	}
 
-	self->fileName   = file_name;
+	self->fileName   = fileName;
+	self->fileSource = fileSource;
+	self->fileLength = ACHIOR_LABS_STRLEN(fileSource);
 	self->tokens     = tokens;
-	self->tokenSize  = tokens.size;
+	self->tokenSize  = tokens.len;
 	self->index      = 0;
 	self->bump       = bump;
 	self->astProgram = NULL;
+	self->engine     = engine;
 	self->panicMode  = false;
 	self->hasErrors  = false;
 
 	ParserParseProgram(self);
 
-	puts("parsing done");
+	//puts("parsing done");
 	return true;
 }
 
 
 
-enum TokenType ParserKeywordToToken(
-	struct Parser *self,
-	char *keyword
-)
+enum TokenKind ParserKeywordToToken(struct Parser *self,char *keyword)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
@@ -242,13 +237,13 @@ enum TokenType ParserKeywordToToken(
 	{
 		return TOKEN_KEYWORD_U64;
 	}
+	else if (!strcmp(keyword,"use"))
+	{
+		return TOKEN_KEYWORD_USE;
+	}
 	else if (!strcmp(keyword,"union"))
 	{
 		return TOKEN_KEYWORD_UNION;
-	}
-	else if (!strcmp(keyword,"variant"))
-	{
-		return TOKEN_KEYWORD_VARIANT;
 	}
 	else if (!strcmp(keyword,"void"))
 	{
@@ -261,10 +256,7 @@ enum TokenType ParserKeywordToToken(
 	
 }
 
-enum TokenType ParserSymbolToToken(
-	struct Parser *self,
-	char *keyword
-)
+enum TokenKind ParserSymbolToToken(struct Parser *self,char *keyword)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
@@ -321,6 +313,10 @@ enum TokenType ParserSymbolToToken(
 	{
 		return TOKEN_LESS;
 	}
+	else if (!strcmp(keyword,"<<"))
+	{
+		return TOKEN_LEFT_SHIFT;
+	}
 	else if (!strcmp(keyword,"<="))
 	{
 		return TOKEN_LESS_EQUAL;
@@ -329,13 +325,33 @@ enum TokenType ParserSymbolToToken(
 	{
 		return TOKEN_GREATER;
 	}
+	else if (!strcmp(keyword,">>"))
+	{
+		return TOKEN_RIGHT_SHIFT;
+	}
 	else if (!strcmp(keyword,">="))
 	{
 		return TOKEN_GREATER_EQUAL;
 	}
+	else if (!strcmp(keyword,"=="))
+	{
+		return TOKEN_EQUAL;
+	}
+	else if (!strcmp(keyword,"!="))
+	{
+		return TOKEN_NOT_EQUAL;
+	}
 	else if (!strcmp(keyword,"&&"))
 	{
 		return TOKEN_AND;
+	}
+	else if (!strcmp(keyword,"|"))
+	{
+		return TOKEN_BITWISE_OR;
+	}
+	else if (!strcmp(keyword,"&"))
+	{
+		return TOKEN_BITWISE_AND;
 	}
 	else if (!strcmp(keyword,"||"))
 	{
@@ -373,6 +389,10 @@ enum TokenType ParserSymbolToToken(
 	{
 		return TOKEN_COLON;
 	}
+	else if (!strcmp(keyword,"::"))
+	{
+		return TOKEN_RESOLUTION;
+	}
 	else if (!strcmp(keyword,","))
 	{
 		return TOKEN_COMMA;
@@ -385,10 +405,6 @@ enum TokenType ParserSymbolToToken(
 	{
 		return TOKEN_AT;
 	}
-	else if (!strcmp(keyword,"&"))
-	{
-		return TOKEN_BITWISE_AND;
-	}
 	else
 	{
 		return TOKEN_EOF;
@@ -398,10 +414,7 @@ enum TokenType ParserSymbolToToken(
 
 
 
-enum TokenType ParserStringToToken(
-	struct Parser *self,
-	char *string
-)
+enum TokenKind ParserStringToToken(struct Parser *self,char *string)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
@@ -412,104 +425,116 @@ enum TokenType ParserStringToToken(
 }
 
 
-struct Token ParserPeek(
-	struct Parser *self,
-	i64 lookAhead
-)
+struct Token *ParserPeek(struct Parser *self,i64 lookAhead)
 {
-	if(ACHIOR_LABS_NULL(self) || ACHIOR_LABS_GREATER_EQUAL(self->index + lookAhead,self->tokenSize))
+	if(ACHIOR_LABS_NULL(self) || ParserAtEnd(self) || ACHIOR_LABS_GREATER_EQUAL(self->index + lookAhead,self->tokenSize))
 	{
-		return (struct Token){
-			.type = TOKEN_EOF,
-		};
+		return NULL;
 	}
 
-	return self->tokens.data[self->index + lookAhead];
+	return LinkedListAt(&self->tokens,self->index + lookAhead);
 }
 
 
-struct Token ParserConsume(
-	struct Parser *self
-)
+struct Token *ParserConsume(struct Parser *self)
 {
-	if(ACHIOR_LABS_NULL(self) || ACHIOR_LABS_GREATER_EQUAL(self->index,self->tokenSize))
+	if(ACHIOR_LABS_NULL(self) || ParserAtEnd(self) || ACHIOR_LABS_GREATER_EQUAL(self->index,self->tokenSize))
 	{
-		return (struct Token){
-			.type = TOKEN_EOF,
-		};
+		return NULL;
 	}
 
-	return self->tokens.data[self->index++];
+	return LinkedListAt(&self->tokens,self->index++);
 }
 
 
 
-bool ParserIsTokenType(
-	struct Parser *self,
-	enum TokenType type,
-	i64 lookAhead
-)
+bool ParserIsTokenKind(struct Parser *self,enum TokenKind kind,i64 lookAhead)
 {
-	if( ACHIOR_LABS_NULL(self))
+	if( ACHIOR_LABS_NULL(self) || ParserAtEnd(self))
 	{
 		return false;
 	}
 
-	struct Token token = ParserPeek(self,lookAhead);
-	return ACHIOR_LABS_EQUAL(token.type,type);
+	ACHIOR_LABS_PTR_INIT(struct Token,token);
+
+	token = ParserPeek(self,lookAhead);
+
+	return ACHIOR_LABS_EQUAL(TOKEN_GET_KIND(*token),kind);
 }
 
 
 
 
-bool ParserIsToken(
-	struct Parser *self,
-	char *string,
-	i64 lookAhead
-)
+bool ParserIsToken(struct Parser *self,char *string,i64 lookAhead)
 {
-	if( ACHIOR_LABS_NULL(self))
+	if( ACHIOR_LABS_NULL(self) || ParserAtEnd(self))
 	{
 		return false;
 	}
 
-	return ParserIsTokenType(self,ParserSymbolToToken(self,string),lookAhead) || ParserIsTokenType(self,ParserKeywordToToken(self,string),lookAhead);
+	return ParserIsTokenKind(self,ParserSymbolToToken(self,string),lookAhead) || ParserIsTokenKind(self,ParserKeywordToToken(self,string),lookAhead);
 }
 
 
 
-void ParserFatal(
-	struct Parser *self,
-	char *string
-)
+void ParserFatal(struct Parser *self,struct Token *token,char *message,char *label,char *help,char *fix,char *note)
 {
-	if( ACHIOR_LABS_NULL(self))
+	if( ACHIOR_LABS_NULL(self) || ParserAtEnd(self))
 	{
 		return;
 	}
+
+	ACHIOR_LABS_STRUCT_INIT(struct Span,span);
+	ACHIOR_LABS_PTR_INIT(struct Diagnostic,diagnostic);
 
 	self->panicMode  = true;
-	self->hasErrors = true;
-	ACHIOR_LABS_PRINT(string);
+	self->hasErrors  = true;
+	span             = token->span;
+	diagnostic       = DiagnosticEngineReport(self->engine,DIAGNOSTIC_ERROR,message,self->fileName,self->fileSource,self->fileLength,1);
+	
+	
+	if(ACHIOR_LABS_NOT_NULL(label))
+	{
+		DiagnosticAddLabel(diagnostic,span,label,true,self->bump);
+	}
+	else
+	{
+		DiagnosticAddLabel(diagnostic,span,"",true,self->bump);
+	}
+
+	if(ACHIOR_LABS_NOT_NULL(help))
+	{
+		DiagnosticAddHelp(diagnostic,help,self->bump);
+	}
+
+	if(ACHIOR_LABS_NOT_NULL(fix))
+	{
+		DiagnosticAddFix(diagnostic,span,fix,self->bump);
+	}
+	
+	if(ACHIOR_LABS_NOT_NULL(note))
+	{
+		DiagnosticAddNote(diagnostic,note,self->bump);
+	}
 }
 
 
 
 
-void ParserSynchronizeDecl(
-	struct Parser *self
-)
+void ParserSynchronizeDecl(struct Parser *self)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
 		return;
 	}
+
+	ACHIOR_LABS_PTR_INIT(struct Token,token);
 
 	while( !ParserAtEnd(self))
 	{
-		struct Token token = ParserPeek(self,0);
+		token = ParserPeek(self,0);
 
-		switch(token.type)
+		switch(TOKEN_GET_KIND(*token))
 		{
 			case TOKEN_KEYWORD_PUB:
 			case TOKEN_KEYWORD_FN:
@@ -534,21 +559,20 @@ void ParserSynchronizeDecl(
 
 
 
-void ParserSynchronizeStmt(
-	struct Parser *self
-)
+void ParserSynchronizeStmt(struct Parser *self)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
 		return;
 	}
 
+	ACHIOR_LABS_PTR_INIT(struct Token,token);
 
 	while( !ParserAtEnd(self))
 	{
-		struct Token token = ParserPeek(self,0);
+		token = ParserPeek(self,0);
 
-		switch(token.type)
+		switch(TOKEN_GET_KIND(*token))
 		{
 			case TOKEN_KEYWORD_IF:
 			case TOKEN_KEYWORD_LOOP:
@@ -577,18 +601,18 @@ void ParserSynchronizeStmt(
 
 extern const char *tokenTypeNames[];
 
-bool ParserIsType(
-	struct Parser *self
-)
+bool ParserIsType(struct Parser *self)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
 		return false;
 	}
 
-	struct Token token = ParserPeek(self,0);
+	ACHIOR_LABS_PTR_INIT(struct Token,token);
 
-	switch(token.type)
+	token = ParserPeek(self,0);
+
+	switch(TOKEN_GET_KIND(*token))
 	{
 		case TOKEN_KEYWORD_VOID:
 		case TOKEN_KEYWORD_CHAR:
@@ -616,41 +640,36 @@ bool ParserIsType(
 
 
 
-bool ParserIsSymbol(
-	struct Parser *self,
-	char *symbol,
-	i64 lookAhead
-)
+bool ParserIsSymbol(struct Parser *self,char *symbol,i64 lookAhead)
 {
-	if( ACHIOR_LABS_NULL(self))
+	if( ACHIOR_LABS_NULL(self) || ParserAtEnd(self))
 	{
 		return false;
 	}
 
-	return ParserIsTokenType(self,ParserSymbolToToken(self,symbol),lookAhead);
+	return ParserIsTokenKind(self,ParserSymbolToToken(self,symbol),lookAhead);
 }
 
 
 
-bool ParserExpectSymbol(
-	struct Parser *self,
-	char *symbol,
-	char *error_message
-)
+bool ParserExpectSymbol(struct Parser *self,char *symbol,char *message)
 {
-	if( ACHIOR_LABS_NULL(self))
+	if( ACHIOR_LABS_NULL(self) || ParserAtEnd(self))
 	{
 		return false;
 	}
 
-	bool status = false;
-	if( ParserIsTokenType(self,ParserSymbolToToken(self,symbol),0))
+	ACHIOR_LABS_VAR_INIT(bool,status);
+
+	status = false;
+	
+	if( ParserIsTokenKind(self,ParserSymbolToToken(self,symbol),0))
 	{
 		status = true;
 	}
 	else
 	{
-		ParserFatal(self,error_message);
+		ParserFatal(self,ParserPeek(self,0),message,"unexpected symbol","remove this symbol",symbol,NULL);
 	}
 
 	ParserConsume(self);
@@ -661,41 +680,36 @@ bool ParserExpectSymbol(
 
 
 
-bool ParserIsKeyword(
-	struct Parser *self,
-	char *keyword,
-	i64 lookAhead
-)
+bool ParserIsKeyword(struct Parser *self,char *keyword,i64 lookAhead)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
 		return false;
 	}
 
-	return ParserIsTokenType(self,ParserKeywordToToken(self,keyword),lookAhead);
+	return ParserIsTokenKind(self,ParserKeywordToToken(self,keyword),lookAhead);
 }
 
 
 
-bool ParserExpectKeyword(
-	struct Parser *self,
-	char *keyword,
-	char *error_message
-)
+bool ParserExpectKeyword(struct Parser *self,char *keyword,char *message)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
 		return false;
 	}
 
-	bool status = false;
-	if( ParserIsTokenType(self,ParserKeywordToToken(self,keyword),0))
+	ACHIOR_LABS_VAR_INIT(bool,status);
+
+	status = false;
+
+	if( ParserIsTokenKind(self,ParserKeywordToToken(self,keyword),0))
 	{
 		status = true;
 	}
 	else
 	{
-		ParserFatal(self,error_message);
+		ParserFatal(self,ParserPeek(self,0),message,"unexpected keyword","remove this word",keyword,NULL);
 	}
 
 	ParserConsume(self);
@@ -707,39 +721,37 @@ bool ParserExpectKeyword(
 
 
 
-bool ParserIsStringLiteral(
-	struct Parser *self
-)
+bool ParserIsStringLiteral(struct Parser *self)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
 		return false;
 	}
 
-	return ParserIsTokenType(self,TOKEN_LITERAL_STRING,0);
+	return ParserIsTokenKind(self,TOKEN_LITERAL_STRING,0);
 }
 
 
-bool ParserExpectString_literal(
-	struct Parser *self,
-	char *literal,
-	char *error_message
-)
+bool ParserExpectStringLiteral(struct Parser *self,char *literal,char *message)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
 		return false;
 	}
 
-	bool status = false;
-	struct String str = ParserPeek(self,0).value;
+	ACHIOR_LABS_VAR_INIT(bool,status);
+	ACHIOR_LABS_STRUCT_INIT(struct String,str);
+
+	status = false;
+	str    = ParserPeek(self,0)->value;
+
 	if( StringEqualCstr(&str,literal))
 	{
 		status = true;
 	}
 	else
 	{
-		ParserFatal(self,error_message);
+		ParserFatal(self,ParserPeek(self,0),message,"unexpected literal","remove this literal",literal,NULL);
 	}
 
 	ParserConsume(self);
@@ -749,24 +761,20 @@ bool ParserExpectString_literal(
 
 
 
-bool ParserIsIdentifier(
-	struct Parser *self
-)
+bool ParserIsIdentifier(struct Parser *self)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
 		return false;
 	}
 
-	return ParserIsTokenType(self,TOKEN_IDENT,0);
+	return ParserIsTokenKind(self,TOKEN_IDENT,0);
 }
 
 
 
 
-bool ParserAtEnd(
-	struct Parser *self
-)
+bool ParserAtEnd(struct Parser *self)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
@@ -776,20 +784,22 @@ bool ParserAtEnd(
 	return ACHIOR_LABS_GREATER_EQUAL(self->index,self->tokenSize);
 }
 
-struct ASTProgram *ParserParseProgram(
-	struct Parser *self
-)
+struct ASTProgram *ParserParseProgram(struct Parser *self)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
 		return NULL;
 	}
+
+	ACHIOR_LABS_PTR_INIT(struct ASTProgram,program);
+	ACHIOR_LABS_PTR_INIT(struct ASTDeclaration,decl);
+
  
 
 	LinkedListNew(&self->decls,self->bump);
 	while( !ParserAtEnd(self))
 	{
-		struct ASTDeclaration *ast_decl = ParserParseDecl(self);
+		decl = ParserParseDecl(self);
 
 		if(ACHIOR_LABS_TRUE(self->panicMode))
 		{
@@ -797,21 +807,21 @@ struct ASTProgram *ParserParseProgram(
 			continue;
 		}
 
-		if( ACHIOR_LABS_NULL(ast_decl))
+		if( ACHIOR_LABS_NULL(decl))
 		{
 			continue;
 		}
 
 
-		LinkedListPushBack(&self->decls,ast_decl);
+		LinkedListPushBack(&self->decls,decl);
 	}
 
 
 
-	struct ASTProgram *astProgram = ParserMakeProgram(self,self->decls);
-	self->astProgram = astProgram;
+	program          = C4MakeASTProgram(self->bump,self->decls);
+	self->astProgram = program;
 
-	return astProgram;
+	return program;
 }
 
 #define ACHIOR_LABS_SYNCHRONIZE(is_decl) do                                  \
@@ -828,42 +838,47 @@ struct ASTProgram *ParserParseProgram(
 
 
 
-struct ASTDeclaration *ParserParseDecl(
-	struct Parser *self
-)
+struct ASTDeclaration *ParserParseDecl(struct Parser *self)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
 		return NULL;
 	}
 
-	struct Token token                 = ParserPeek(self,0);
-	enum ASTDeclarationType ast_type   = AST_DECLARATION_NONE;
-	void *ast_decl_val                 = NULL;
+	ACHIOR_LABS_PTR_INIT(struct ASTDeclaration,decl);
+	ACHIOR_LABS_PTR_INIT(struct Token,token);
 
-	switch(token.type)
+	token = ParserPeek(self,0);
+
+
+	switch(TOKEN_GET_KIND(*token))
 	{
+		case TOKEN_KEYWORD_USE:
+		{
+			return ParserParseUseDecl(self);
+			break;
+		}
 		case TOKEN_KEYWORD_PUB:
 		{
 			ParserConsume(self);
+
 			if(ParserIsToken(self,"fn",0))
 			{
 				struct String tmp;
-				ast_type     = AST_DECLARATION_FUNCTION;
-				ast_decl_val = (void *)ParserParseFunctionDecl(self,true,false,false,false,tmp,false,tmp);	
+				decl = ParserParseFunctionDecl(self,true,false,false,false,tmp,false,tmp);	
 			}
 			else
 			{
-				ParserFatal(self,"invalid use of pub modifier");
+				ParserFatal(self,ParserPeek(self,0),"invalid use of pub modifier",NULL,"use pub with fn",NULL,NULL);
 				ACHIOR_LABS_SYNCHRONIZE(true);
 			}
+
 			break;
 		}
 		case TOKEN_KEYWORD_FN:
 		{
 			struct String tmp;
-			ast_type     = AST_DECLARATION_FUNCTION;
-			ast_decl_val = (void *)ParserParseFunctionDecl(self,false,true,false,false,tmp,false,tmp);
+			decl = ParserParseFunctionDecl(self,false,true,false,false,tmp,false,tmp);
 			break;
 		}
 		case TOKEN_KEYWORD_FOREIGN:
@@ -872,76 +887,150 @@ struct ASTDeclaration *ParserParseDecl(
 			return NULL;
 			break;
 		}
+		case TOKEN_KEYWORD_ENUM:
+		{
+			struct String tmp;
+			decl = ParserParseEnumDecl(self);
+			break;
+		}
 		case TOKEN_KEYWORD_STRUCT:
 		{
 			struct String tmp;
-			ast_type     = AST_DECLARATION_STRUCT;
-			ast_decl_val = (void *)ParserParseStructDecl(self);
+			decl = ParserParseStructDecl(self);
 			break;
 		}
 		case TOKEN_KEYWORD_UNION:
 		{
 			struct String tmp;
-			ast_type     = AST_DECLARATION_UNION;
-			ast_decl_val = (void *)ParserParseStructDecl(self);
+			decl = ParserParseStructDecl(self);
 			break;
 		}
 		case TOKEN_KEYWORD_IMPL:
 		{
 			struct String tmp;
-			ast_type     = AST_DECLARATION_IMPL;
-			ast_decl_val = (void *)ParserParseImplDecl(self);
+			decl = ParserParseImplDecl(self);
 			break;
 		}
 		case TOKEN_KEYWORD_SUM:
 		{
 			struct String tmp;
-			ast_type     = AST_DECLARATION_SUM;
-			ast_decl_val = (void *)ParserParseSumDecl(self);
+			decl = ParserParseSumDecl(self);
 			break;
 		}
 		case TOKEN_EOF:
 		{
-			ACHIOR_LABS_PRINT("eof");
+			//ACHIOR_LABS_PRINT("eof");
 			ParserConsume(self);
 			break;
 		}
 		default:
 		{
-			ParserConsume(self);
+			//puts(ParserConsume(self)->value.data);
 			break;
 		}
 	}
 
-	struct ASTDeclaration *ast_decl = ParserMakeDeclaration(self,ast_type,ast_decl_val);
-	return ast_decl;
+	return decl;
 }
 
 
 
 
 
-struct ASTStructDecl *ParserParseStructDecl(struct Parser *self)
+struct ASTDeclaration *ParserParseUseDecl(struct Parser *self)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
 		return NULL;
 	}
 	
-	// consume struct keyword
-	ParserExpectKeyword(self,"struct","expected struct keyword");
+
+	ACHIOR_LABS_STRUCT_INIT(struct LinkedList,path);
+	ACHIOR_LABS_PTR_INIT(struct Token,ident);
+	ACHIOR_LABS_PTR_INIT(struct Token,alias);
+	ACHIOR_LABS_PTR_INIT(struct ASTUseDecl,decl);
+
+	// consume use keyword
+	ParserExpectKeyword(self,"use","expected use keyword");
 	ACHIOR_LABS_SYNCHRONIZE(true);
 
-	struct Token ident;
+    LinkedListNew(&path,self->bump);
 
-	// check if we have a struct name,raise and error if not
+
+	// check if we have an import name,raise and error if not
 	if( ParserIsIdentifier(self))
 	{
 		ident = ParserConsume(self);
 	}
 	else
 	{
-		ParserFatal(self,"expected an identifier after struct");
+		ParserFatal(self,ParserPeek(self,0),"expected an identifier after use",NULL,NULL,NULL,NULL);
+		ACHIOR_LABS_SYNCHRONIZE(true);
+	}
+
+
+    LinkedListPushBack(&path,TOKEN_GET_VALUE_DATA(*ident));
+
+    while (ParserIsToken(self,"::",0))
+    {
+		ParserExpectSymbol(self,"::","expected :: ");
+		ACHIOR_LABS_SYNCHRONIZE(true);
+
+        ident = ParserConsume(self);
+        LinkedListPushBack(&path,TOKEN_GET_VALUE_DATA(*ident));
+    }
+
+
+	// consume as keyword
+	ParserExpectKeyword(self,"as","expected as keyword after module paths");
+	ACHIOR_LABS_SYNCHRONIZE(true);
+
+
+	// check if we have an alias name,raise and error if not
+	if( ParserIsIdentifier(self))
+	{
+		alias = ParserConsume(self);
+	}
+	else
+	{
+		ParserFatal(self,ParserPeek(self,0),"expected an alias identifier after as keyword",NULL,NULL,NULL,NULL);
+		ACHIOR_LABS_SYNCHRONIZE(true);
+	}
+
+	decl = C4MakeASTUseDecl(self->bump,path,alias);
+
+	return C4MakeASTDeclaration(self->bump,AST_DECLARATION_USE,decl,false);
+}
+
+
+
+
+struct ASTDeclaration *ParserParseEnumDecl(struct Parser *self)
+{
+	if( ACHIOR_LABS_NULL(self))
+	{
+		return NULL;
+	}
+
+
+	ACHIOR_LABS_PTR_INIT(struct Token,ident);
+	ACHIOR_LABS_STRUCT_INIT(struct LinkedList,constants);
+	ACHIOR_LABS_PTR_INIT(struct ASTEnumConstant,constant);
+	ACHIOR_LABS_PTR_INIT(struct ASTEnumDecl,decl);
+	
+	// consume enum keyword
+	ParserExpectKeyword(self,"enum","expected enum keyword");
+	ACHIOR_LABS_SYNCHRONIZE(true);
+
+
+	// check if we have an enum name,raise and error if not
+	if( ParserIsIdentifier(self))
+	{
+		ident = ParserConsume(self);
+	}
+	else
+	{
+		ParserFatal(self,ParserPeek(self,0),"expected an identifier after struct",NULL,NULL,NULL,NULL);
 		ACHIOR_LABS_SYNCHRONIZE(true);
 	}
 
@@ -949,19 +1038,18 @@ struct ASTStructDecl *ParserParseStructDecl(struct Parser *self)
 	ParserExpectSymbol(self,":","expected :");
 	ACHIOR_LABS_SYNCHRONIZE(true);
 
-	struct LinkedList properties;
-	LinkedListNew(&properties,self->bump);
+	LinkedListNew(&constants,self->bump);
 	
 
 	while( !ParserIsToken(self,")",0))
 	{
-		struct ASTStructProperty *ASTStructProperty = ParserParseStructProperty(self);
-		if( ACHIOR_LABS_NULL(ASTStructProperty))
+		constant = ParserParseEnumConstant(self);
+		if( ACHIOR_LABS_NULL(constant))
 		{
 			continue;
 		}
 
-		LinkedListPushBack(&properties,ASTStructProperty);
+		LinkedListPushBack(&constants,constant);
 		if( ParserIsSymbol(self,":",0))
 		{
 			break;
@@ -971,9 +1059,105 @@ struct ASTStructDecl *ParserParseStructDecl(struct Parser *self)
 	ParserExpectSymbol(self,":","expected )");
 	ACHIOR_LABS_SYNCHRONIZE(true);
 
-	struct ASTStructDecl *ast_struct_decl = ParserMakeStructDecl(self,ident,properties);
-	return ast_struct_decl;
+	decl = C4MakeASTEnumDecl(self->bump,ident,constants);
+
+	return C4MakeASTDeclaration(self->bump,AST_DECLARATION_ENUM,decl,false);
 }
+
+
+struct ASTEnumConstant *ParserParseEnumConstant(struct Parser *self)
+{
+	if( ACHIOR_LABS_NULL(self))
+	{
+		return NULL;
+	}
+
+	ACHIOR_LABS_PTR_INIT(struct Token,ident);
+	ACHIOR_LABS_PTR_INIT(struct ASTEnumConstant,constant);
+	ACHIOR_LABS_PTR_INIT(struct ASTExpression,expr);
+
+	if( ParserIsIdentifier(self))
+	{
+		ident = ParserConsume(self);
+	}
+	else
+	{
+		ParserFatal(self,ParserPeek(self,0),"expected an identifier as enum constant",NULL,"Add an enum constant",NULL,NULL);
+		ACHIOR_LABS_SYNCHRONIZE(true);
+	}
+
+
+	if(ParserIsToken(self,"=",0))
+	{
+		ParserConsume(self);
+		expr = ParserParseExpr(self,0);
+	}
+
+	return C4MakeASTEnumConstant(self->bump,ident,expr);
+}
+
+
+
+
+struct ASTDeclaration *ParserParseStructDecl(struct Parser *self)
+{
+	if( ACHIOR_LABS_NULL(self))
+	{
+		return NULL;
+	}
+	
+
+	ACHIOR_LABS_PTR_INIT(struct Token,ident);
+	ACHIOR_LABS_PTR_INIT(struct ASTStructDecl,decl);
+	ACHIOR_LABS_PTR_INIT(struct ASTStructProperty,property);
+	ACHIOR_LABS_STRUCT_INIT(struct LinkedList,properties);
+
+	// consume struct keyword
+	ParserExpectKeyword(self,"struct","expected struct keyword");
+	ACHIOR_LABS_SYNCHRONIZE(true);
+
+
+	// check if we have a struct name,raise and error if not
+	if( ParserIsIdentifier(self))
+	{
+		ident = ParserConsume(self);
+	}
+	else
+	{
+		ParserFatal(self,ParserPeek(self,0),"expected an identifier after struct",NULL,NULL,NULL,NULL);
+		ACHIOR_LABS_SYNCHRONIZE(true);
+	}
+
+	// consume the :
+	ParserExpectSymbol(self,":","expected :");
+	ACHIOR_LABS_SYNCHRONIZE(true);
+
+	LinkedListNew(&properties,self->bump);
+	
+
+	while( !ParserIsToken(self,")",0))
+	{
+		property = ParserParseStructProperty(self);
+		if( ACHIOR_LABS_NULL(property))
+		{
+			continue;
+		}
+
+		LinkedListPushBack(&properties,property);
+		if( ParserIsSymbol(self,":",0))
+		{
+			break;
+		}
+	}
+
+	ParserExpectSymbol(self,":","expected )");
+	ACHIOR_LABS_SYNCHRONIZE(true);
+
+	decl = C4MakeASTStructDecl(self->bump,ident,properties);
+
+	return C4MakeASTDeclaration(self->bump,AST_DECLARATION_STRUCT,decl,false);
+}
+
 
 
 
@@ -986,13 +1170,15 @@ struct ASTStructProperty *ParserParseStructProperty(struct Parser *self)
 		return NULL;
 	}
 
-	struct ASTType *ast_type = ParserParseType(self);
-	if( ACHIOR_LABS_NULL(ast_type))
+	ACHIOR_LABS_PTR_INIT(struct ASTType,type);
+	ACHIOR_LABS_PTR_INIT(struct Token,ident);
+
+
+	type = ParserParseType(self);
+	if( ACHIOR_LABS_NULL(type))
 	{
 		ACHIOR_LABS_PRINT("null argument type");
 	}
-
-	struct Token ident;
 
 
 	if( ParserIsIdentifier(self))
@@ -1001,12 +1187,11 @@ struct ASTStructProperty *ParserParseStructProperty(struct Parser *self)
 	}
 	else
 	{
-		ParserFatal(self,"expected an identifier after fn");
+		ParserFatal(self,ParserPeek(self,0),"expected an identifier after type in struct property",NULL,NULL,NULL,NULL);
 		ACHIOR_LABS_SYNCHRONIZE(true);
 	}
 
-	struct ASTStructProperty *ASTStructProperty = ParserMakeStructProperty(self,ast_type,ident);
-	return ASTStructProperty;
+	return C4MakeASTStructProperty(self->bump,type,ident);
 }
 
 
@@ -1014,18 +1199,23 @@ struct ASTStructProperty *ParserParseStructProperty(struct Parser *self)
 
 
 
-struct ASTImplDecl *ParserParseImplDecl(struct Parser *self)
+struct ASTDeclaration *ParserParseImplDecl(struct Parser *self)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
 		return NULL;
 	}
 	
-	// consume struct keyword
+
+	ACHIOR_LABS_PTR_INIT(struct Token,ident);
+	ACHIOR_LABS_PTR_INIT(struct ASTFunctionDecl,method);
+	ACHIOR_LABS_PTR_INIT(struct ASTImplDecl,decl);
+	ACHIOR_LABS_STRUCT_INIT(struct LinkedList,methods);
+	ACHIOR_LABS_STRUCT_INIT(struct String,tmp);
+
+	// consume impl keyword
 	ParserExpectKeyword(self,"impl","expected impl keyword");
 	ACHIOR_LABS_SYNCHRONIZE(true);
-
-	struct Token ident;
 
 	// check if we have a struct name,raise and error if not
 	if( ParserIsIdentifier(self))
@@ -1034,7 +1224,7 @@ struct ASTImplDecl *ParserParseImplDecl(struct Parser *self)
 	}
 	else
 	{
-		ParserFatal(self,"expected an identifier after impl");
+		ParserFatal(self,ParserPeek(self,0),"expected an identifier after impl",NULL,NULL,NULL,NULL);
 		ACHIOR_LABS_SYNCHRONIZE(true);
 	}
 
@@ -1042,14 +1232,12 @@ struct ASTImplDecl *ParserParseImplDecl(struct Parser *self)
 	ParserExpectSymbol(self,":","expected :");
 	ACHIOR_LABS_SYNCHRONIZE(true);
 
-	struct LinkedList methods;
 	LinkedListNew(&methods,self->bump);
 	
 
 	while( !ParserIsToken(self,")",0))
 	{
-		struct String tmp;
-		struct ASTFunctionDecl *method = ParserParseImplMethod(self,ident,false,true,false,false,tmp,false,tmp);
+		method = ParserParseImplMethod(self,ident,false,true,false,false,tmp,false,tmp);
 		if( ACHIOR_LABS_NULL(method))
 		{
 			continue;
@@ -1065,33 +1253,42 @@ struct ASTImplDecl *ParserParseImplDecl(struct Parser *self)
 	ParserExpectSymbol(self,":","expected )");
 	ACHIOR_LABS_SYNCHRONIZE(true);
 
-	struct ASTImplDecl *decl = ParserMakeImplDecl(self,ident,methods);
-	return decl;
+	decl = C4MakeASTImplDecl(self->bump,ident,methods);
+	return C4MakeASTDeclaration(self->bump,AST_DECLARATION_IMPL,decl,false);
 }
 
 
 
 
 
-struct ASTFunctionDecl *ParserParseImplMethod(struct Parser *self,struct Token structIdent,bool is_pub,bool is_static,bool is_naked,bool is_foreign,struct String foreign_abi,bool has_link_name,struct String link_name)
+struct ASTFunctionDecl *ParserParseImplMethod(struct Parser *self,struct Token *structIdent,bool isPublic,bool isStatic,bool isNaked,bool isForeign,struct String foreignAbi,bool hasLinkName,struct String linkName)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
 		return NULL;
 	}
 
+	ACHIOR_LABS_PTR_INIT(struct Token,ident);
+	ACHIOR_LABS_PTR_INIT(struct ASTFunctionDecl,decl);
+	ACHIOR_LABS_PTR_INIT(struct ASTFunctionArgument,argument);
+	ACHIOR_LABS_PTR_INIT(struct ASTType,type);
+	ACHIOR_LABS_PTR_INIT(struct Token,selfIdent);
+	ACHIOR_LABS_PTR_INIT(struct ASTPointerType,pointerType);
+	ACHIOR_LABS_PTR_INIT(struct ASTBlockStmt,block);
+	ACHIOR_LABS_PTR_INIT(struct ASTFunctionAttributes,attributes);
 
-	if(ACHIOR_LABS_TRUE(is_pub) && ACHIOR_LABS_TRUE(is_foreign))
+	ACHIOR_LABS_STRUCT_INIT(struct LinkedList,arguments);
+	ACHIOR_LABS_STRUCT_INIT(struct String,tmp);
+
+	if(ACHIOR_LABS_TRUE(isPublic) && ACHIOR_LABS_TRUE(isForeign))
 	{
-		ParserFatal(self,"function cannot be both foreign and public");
+		ParserFatal(self,ParserPeek(self,0),"function cannot be both foreign and public",NULL,NULL,NULL,NULL);
 		ACHIOR_LABS_SYNCHRONIZE(true);
 	}
 
 	// consume fn keyword
 	ParserExpectKeyword(self,"fn","expected fn");
 	ACHIOR_LABS_SYNCHRONIZE(true);
-
-	struct Token ident;
 
 	// check if we have a function name,raise and error if not
 	if( ParserIsIdentifier(self))
@@ -1100,34 +1297,26 @@ struct ASTFunctionDecl *ParserParseImplMethod(struct Parser *self,struct Token s
 	}
 	else
 	{
-		ParserFatal(self,"expected an identifier after fn");
+		ParserFatal(self,ParserPeek(self,0),"expected an identifier after fn",NULL,NULL,NULL,NULL);
 		ACHIOR_LABS_SYNCHRONIZE(true);
 	}
-
-	struct String name;
-	StringNew(&name,10,self->bump);
-	StringPushBack(&name,ident.value.data);
-	ident.value.size = 0;
-	StringPushBack(&ident.value,"__C4C");
-	StringPushBack(&ident.value,structIdent.value.data);
-	StringPushBack(&ident.value,name.data);
 
 
 	// consume the open paren
 	ParserExpectSymbol(self,"(","expected (");
 	ACHIOR_LABS_SYNCHRONIZE(true);
 
-	struct LinkedList arguments;
 	LinkedListNew(&arguments,self->bump);
 
-	struct String tmp;
 	StringNew(&tmp,10,self->bump);
 	StringPushBack(&tmp,"self");
-	struct Token selfIdent               = (struct Token){.type = TOKEN_IDENT,.value = tmp};
-	struct ASTType *astType              = ParserMakeType(self,AST_DATA_TYPE_AGGREGATE,ParserMakeAggregateType(self,structIdent));
-	struct ASTPointerType *pointerType   = ParserMakePointerType(self,astType);
-	astType                              = ParserMakeType(self,AST_DATA_TYPE_POINTER,pointerType);
-	struct ASTFunctionArgument *argument = ParserMakeFunctionArgument(self,astType,selfIdent);
+
+	selfIdent   = C4MakeToken(self->bump,TOKEN_IDENT,tmp,(struct Span){});
+	type        = C4MakeASTType(self->bump,AST_DATA_TYPE_STRUCT,C4MakeASTStructType(self->bump,structIdent,(struct Layout){0}));
+	pointerType = C4MakeASTPointerType(self->bump,type);
+	type        = C4MakeASTType(self->bump,AST_DATA_TYPE_POINTER,pointerType);
+	argument    = C4MakeASTFunctionArgument(self->bump,type,selfIdent);
+	
 	LinkedListPushBack(&arguments,argument);
 
 	while( !ParserIsToken(self,")",0))
@@ -1151,23 +1340,19 @@ struct ASTFunctionDecl *ParserParseImplMethod(struct Parser *self,struct Token s
 	ParserExpectSymbol(self,")","expected )");
 	ACHIOR_LABS_SYNCHRONIZE(true);
 
-	struct ASTType *return_type;
-
 	if(ParserIsToken(self,"->",0))
 	{
 		ParserExpectSymbol(self,"->","expected ->");
 		ACHIOR_LABS_SYNCHRONIZE(true);
-		return_type = ParserParseType(self);
+		type = ParserParseType(self);
 	}
 	else
 	{
-		return_type = ParserMakeType(self,AST_DATA_TYPE_VOID,NULL);
+		type = C4MakeASTType(self->bump,AST_DATA_TYPE_VOID,NULL);
 	}
 	
 
-	struct ASTBlockStmt *block = NULL;
-
-	if(ACHIOR_LABS_FALSE(is_foreign))
+	if(ACHIOR_LABS_FALSE(isForeign))
 	{
 
 		if( ParserIsSymbol(self,":",0))
@@ -1176,16 +1361,15 @@ struct ASTFunctionDecl *ParserParseImplMethod(struct Parser *self,struct Token s
 		}
 		else
 		{
-			ParserFatal(self,"error : function lacks a valid block");
+			ParserFatal(self,ParserPeek(self,0),"expected a function block => Function lacks a valid block",NULL,NULL,NULL,NULL);
 			ACHIOR_LABS_SYNCHRONIZE(true);
 		}
 	}
 
 
-	struct ASTFunctionAttributes *attributes = ParserMakeFunctionAttributes(self,is_pub,is_static,is_naked,is_foreign,foreign_abi,has_link_name,link_name);
-	
-	struct ASTFunctionDecl *ast_fn = ParserMakeFunctionDecl(self,return_type,ident,arguments,block,attributes);
-	return ast_fn;
+	attributes = C4MakeASTFunctionAttributes(self->bump,isPublic,isStatic,isNaked,isForeign,foreignAbi,hasLinkName,linkName);
+
+	return C4MakeASTFunctionDecl(self->bump,type,ident,arguments,block,attributes);
 }
 
 
@@ -1195,18 +1379,24 @@ struct ASTFunctionDecl *ParserParseImplMethod(struct Parser *self,struct Token s
 
 
 
-struct ASTSumDecl *ParserParseSumDecl(struct Parser *self)
+struct ASTDeclaration *ParserParseSumDecl(struct Parser *self)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
 		return NULL;
 	}
 	
+
+	ACHIOR_LABS_PTR_INIT(struct Token,ident);
+	ACHIOR_LABS_PTR_INIT(struct ASTSumDecl,decl);
+	ACHIOR_LABS_PTR_INIT(struct ASTSumVariant,variant);
+
+	ACHIOR_LABS_STRUCT_INIT(struct LinkedList,variants);
+
 	// consume sum keyword
 	ParserExpectKeyword(self,"sum","expected sum keyword");
 	ACHIOR_LABS_SYNCHRONIZE(true);
 
-	struct Token ident;
 
 	// check if we have a sum name,raise and error if not
 	if( ParserIsIdentifier(self))
@@ -1215,7 +1405,7 @@ struct ASTSumDecl *ParserParseSumDecl(struct Parser *self)
 	}
 	else
 	{
-		ParserFatal(self,"expected an identifier after sum");
+		ParserFatal(self,ParserPeek(self,0),"expected an identifier after sum",NULL,NULL,NULL,NULL);
 		ACHIOR_LABS_SYNCHRONIZE(true);
 	}
 
@@ -1223,13 +1413,12 @@ struct ASTSumDecl *ParserParseSumDecl(struct Parser *self)
 	ParserExpectSymbol(self,":","expected :");
 	ACHIOR_LABS_SYNCHRONIZE(true);
 
-	struct LinkedList variants;
 	LinkedListNew(&variants,self->bump);
 	
 
 	while( !ParserIsToken(self,":",0))
 	{
-		struct ASTSumVariant *variant = ParserParseSumVariant(self);
+		variant = ParserParseSumVariant(self);
 		if( ACHIOR_LABS_NULL(variant))
 		{
 			continue;
@@ -1245,8 +1434,8 @@ struct ASTSumDecl *ParserParseSumDecl(struct Parser *self)
 	ParserExpectSymbol(self,":","expected )");
 	ACHIOR_LABS_SYNCHRONIZE(true);
 
-	struct ASTSumDecl *decl = ParserMakeSumDecl(self,ident,variants);
-	return decl;
+	decl = C4MakeASTSumDecl(self->bump,ident,variants);
+	return C4MakeASTDeclaration(self->bump,AST_DECLARATION_SUM,decl,false);
 }
 
 
@@ -1260,9 +1449,12 @@ struct ASTSumVariant *ParserParseSumVariant(struct Parser *self)
 		return NULL;
 	}
 
-	
+	ACHIOR_LABS_PTR_INIT(struct Token,ident);
+	ACHIOR_LABS_PTR_INIT(struct ASTType,type);
+	ACHIOR_LABS_VAR_INIT(enum ASTSumVariantKind,kind);
 
-	struct Token ident;
+	ACHIOR_LABS_STRUCT_INIT(struct LinkedList,fields);
+
 
 	if( ParserIsIdentifier(self))
 	{
@@ -1270,22 +1462,21 @@ struct ASTSumVariant *ParserParseSumVariant(struct Parser *self)
 	}
 	else
 	{
-		ParserFatal(self,"expected an identifier in sum type field");
+		ParserFatal(self,ParserPeek(self,0),"expected an identifier in sumtype field",NULL,NULL,NULL,NULL);
 		ACHIOR_LABS_SYNCHRONIZE(true);
 	}
 
-	enum ASTSumVariantKind kind = AST_SUM_VARIANT_NONE;
-	struct LinkedList fields;
+	kind = AST_SUM_VARIANT_NONE;
+	
 	LinkedListNew(&fields,self->bump);
 
 	if( ParserIsSymbol(self,"(",0))
 	{
-		// consume the (
+		// consume the (	
 		ParserExpectSymbol(self,"(","expected (");
 
-		
+		type = ParserParseType(self);
 
-		struct ASTType *type = ParserParseType(self);
 		if( ACHIOR_LABS_NULL(type))
 		{
 			ACHIOR_LABS_PRINT("null argument type");
@@ -1322,14 +1513,11 @@ struct ASTSumVariant *ParserParseSumVariant(struct Parser *self)
 			}
 		}
 
-		
-
 		// consume the )
 		ParserExpectSymbol(self,")","expected )");
 	}
 
-	struct ASTSumVariant *variant = ParserMakeSumVariant(self,ident,kind,fields);
-	return variant;
+	return C4MakeASTSumVariant(self->bump,ident,kind,fields);
 }
 
 
@@ -1340,26 +1528,25 @@ void *ParserParseForeignDecl(struct Parser *self)
 	{
 		return NULL;
 	}
-	
+
+	ACHIOR_LABS_STRUCT_INIT(struct String,foreignAbi);
+
+
 	// consume foreign keyword
 	ParserExpectKeyword(self,"foreign","expected foreign");
 	
-	struct String foreign_abi;
 	if(ParserIsStringLiteral(self))
 	{
-		foreign_abi = ParserConsume(self).value;
+		foreignAbi = TOKEN_GET_VALUE(*ParserConsume(self));
 	}
 
 
-	ParserExpectSymbol(self,":","expected a : after foreign_abi ");
+	ParserExpectSymbol(self,":","expected a : after foreignAbi ");
 	ACHIOR_LABS_SYNCHRONIZE(true);
 
 	while(! ParserIsToken(self,":",0))
 	{
-		struct ASTFunctionDecl *ast_fn = ParserParseFunctionDecl(self,false,false,false,true,foreign_abi,false,(struct String){});
-		struct ASTDeclaration *ast_decl = ParserMakeDeclaration(self,AST_DECLARATION_FUNCTION,ast_fn);
-		LinkedListPushBack(&self->decls,ast_decl);
-		
+		LinkedListPushBack(&self->decls,ParserParseFunctionDecl(self,false,false,false,true,foreignAbi,false,(struct String){}));	
 	}
 
 	ParserExpectSymbol(self,":","expected : after foreign");
@@ -1368,25 +1555,35 @@ void *ParserParseForeignDecl(struct Parser *self)
 	return NULL;
 }
 
-struct ASTFunctionDecl *ParserParseFunctionDecl(struct Parser *self,bool is_pub,bool is_static,bool is_naked,bool is_foreign,struct String foreign_abi,bool has_link_name,struct String link_name)
+
+
+
+struct ASTDeclaration *ParserParseFunctionDecl(struct Parser *self,bool isPublic,bool isStatic,bool isNaked,bool isForeign,struct String foreignAbi,bool hasLinkName,struct String linkName)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
 		return NULL;
 	}
 
+	ACHIOR_LABS_PTR_INIT(struct Token,ident);
+	ACHIOR_LABS_PTR_INIT(struct ASTFunctionDecl,decl);
+	ACHIOR_LABS_PTR_INIT(struct ASTFunctionArgument,argument);
+	ACHIOR_LABS_PTR_INIT(struct ASTFunctionAttributes,attributes);
+	ACHIOR_LABS_PTR_INIT(struct ASTType,type);
+	ACHIOR_LABS_PTR_INIT(struct ASTBlockStmt,block);
 
-	if(ACHIOR_LABS_TRUE(is_pub) && ACHIOR_LABS_TRUE(is_foreign))
+	ACHIOR_LABS_STRUCT_INIT(struct LinkedList,arguments);
+
+
+	if(ACHIOR_LABS_TRUE(isPublic) && ACHIOR_LABS_TRUE(isForeign))
 	{
-		ParserFatal(self,"function cannot be both foreign and public");
+		ParserFatal(self,ParserPeek(self,0),"function cannot be both foreign and public",NULL,NULL,NULL,NULL);
 		ACHIOR_LABS_SYNCHRONIZE(true);
 	}
 
 	// consume fn keyword
 	ParserExpectKeyword(self,"fn","expected fn");
 	ACHIOR_LABS_SYNCHRONIZE(true);
-
-	struct Token ident;
 
 	// check if we have a function name,raise and error if not
 	if( ParserIsIdentifier(self))
@@ -1395,7 +1592,7 @@ struct ASTFunctionDecl *ParserParseFunctionDecl(struct Parser *self,bool is_pub,
 	}
 	else
 	{
-		ParserFatal(self,"expected an identifier after fn");
+		ParserFatal(self,ParserPeek(self,0),"expected an identifier after fn",NULL,NULL,NULL,NULL);
 		ACHIOR_LABS_SYNCHRONIZE(true);
 	}
 
@@ -1403,13 +1600,14 @@ struct ASTFunctionDecl *ParserParseFunctionDecl(struct Parser *self,bool is_pub,
 	ParserExpectSymbol(self,"(","expected (");
 	ACHIOR_LABS_SYNCHRONIZE(true);
 
-	struct LinkedList arguments;
+
 	LinkedListNew(&arguments,self->bump);
-	
 
 	while( !ParserIsToken(self,")",0))
 	{
-		struct ASTFunctionArgument *argument = ParserParseFunctionArgument(self);
+		argument = ParserParseFunctionArgument(self);
+		ACHIOR_LABS_SYNCHRONIZE(true);
+
 		if( ACHIOR_LABS_NULL(argument))
 		{
 			continue;
@@ -1428,41 +1626,42 @@ struct ASTFunctionDecl *ParserParseFunctionDecl(struct Parser *self,bool is_pub,
 	ParserExpectSymbol(self,")","expected )");
 	ACHIOR_LABS_SYNCHRONIZE(true);
 
-	struct ASTType *return_type;
 
 	if(ParserIsToken(self,"->",0))
 	{
 		ParserExpectSymbol(self,"->","expected ->");
 		ACHIOR_LABS_SYNCHRONIZE(true);
-		return_type = ParserParseType(self);
+
+		type = ParserParseType(self);
+		ACHIOR_LABS_SYNCHRONIZE(true);
 	}
 	else
 	{
-		return_type = ParserMakeType(self,AST_DATA_TYPE_VOID,NULL);
+		type = C4MakeASTType(self->bump,AST_DATA_TYPE_VOID,NULL);
+		ACHIOR_LABS_SYNCHRONIZE(true);
 	}
 	
 
-	struct ASTBlockStmt *block = NULL;
-
-	if(ACHIOR_LABS_FALSE(is_foreign))
+	if(ACHIOR_LABS_FALSE(isForeign))
 	{
 
 		if( ParserIsSymbol(self,":",0))
 		{
 			block = ParserParseBlockStmt(self);
+			ACHIOR_LABS_SYNCHRONIZE(true);
 		}
 		else
 		{
-			ParserFatal(self,"error : function lacks a valid block");
+			ParserFatal(self,ParserPeek(self,0),"function Lacks a valid block => expected a valid block",NULL,NULL,NULL,NULL);
 			ACHIOR_LABS_SYNCHRONIZE(true);
 		}
 	}
 
 
-	struct ASTFunctionAttributes *attributes = ParserMakeFunctionAttributes(self,is_pub,is_static,is_naked,is_foreign,foreign_abi,has_link_name,link_name);
-	
-	struct ASTFunctionDecl *ast_fn = ParserMakeFunctionDecl(self,return_type,ident,arguments,block,attributes);
-	return ast_fn;
+	attributes = C4MakeASTFunctionAttributes(self->bump,isPublic,isStatic,isNaked,isForeign,foreignAbi,hasLinkName,linkName);
+	decl       = C4MakeASTFunctionDecl(self->bump,type,ident,arguments,block,attributes);
+
+	return C4MakeASTDeclaration(self->bump,AST_DECLARATION_FUNCTION,decl,false);
 }
 
 
@@ -1474,14 +1673,17 @@ struct ASTFunctionArgument *ParserParseFunctionArgument(struct Parser *self)
 		return NULL;
 	}
 
-	struct ASTType *ast_type = ParserParseType(self);
-	if( ACHIOR_LABS_NULL(ast_type))
+	ACHIOR_LABS_PTR_INIT(struct ASTType,type);
+	ACHIOR_LABS_PTR_INIT(struct Token,ident);
+	ACHIOR_LABS_PTR_INIT(struct ASTFunctionArgument,argument);
+
+	type = ParserParseType(self);
+
+	if( ACHIOR_LABS_NULL(type))
 	{
 		ACHIOR_LABS_PRINT("null argument type");
 		ACHIOR_LABS_SYNCHRONIZE(true);
 	}
-
-	struct Token ident;
 
 
 	if( ParserIsIdentifier(self))
@@ -1490,11 +1692,11 @@ struct ASTFunctionArgument *ParserParseFunctionArgument(struct Parser *self)
 	}
 	else
 	{
-		ParserFatal(self,"expected an identifier after fn");
+		ParserFatal(self,ParserPeek(self,0),"expected an identifier after fn",NULL,NULL,NULL,NULL);
 		ACHIOR_LABS_SYNCHRONIZE(true);
 	}
 
-	struct ASTFunctionArgument *argument = ParserMakeFunctionArgument(self,ast_type,ident);
+	argument = C4MakeASTFunctionArgument(self->bump,type,ident);
 	return argument;
 
 }
@@ -1507,88 +1709,97 @@ enum ASTDataType ParserGetDataType(struct Parser *self)
 		return AST_DATA_TYPE_NONE;
 	}
 
-	enum ASTDataType data_type = AST_DATA_TYPE_NONE;
+	ACHIOR_LABS_VAR_INIT(enum ASTDataType,type);
 
 	if( ParserIsToken(self,"void",0))
 	{
-		data_type = AST_DATA_TYPE_VOID;
+		type = AST_DATA_TYPE_VOID;
 		ParserConsume(self);
 	}
 	else if( ParserIsToken(self,"char",0))
 	{
-		data_type = AST_DATA_TYPE_CHAR;
+		type = AST_DATA_TYPE_CHAR;
 		ParserConsume(self);
 	}
 	else if( ParserIsToken(self,"i8",0))
 	{
-		data_type = AST_DATA_TYPE_I8;
+		type = AST_DATA_TYPE_I8;
 		ParserConsume(self);
 	}
 	else if( ParserIsToken(self,"i16",0))
 	{
-		data_type = AST_DATA_TYPE_I16;
+		type = AST_DATA_TYPE_I16;
 		ParserConsume(self);
 	}
 	else if( ParserIsToken(self,"i32",0))
 	{
-		data_type = AST_DATA_TYPE_I32;
+		type = AST_DATA_TYPE_I32;
 		ParserConsume(self);
 	}
 	else if( ParserIsToken(self,"i64",0))
 	{
-		data_type = AST_DATA_TYPE_I64;
+		type = AST_DATA_TYPE_I64;
 		ParserConsume(self);
 	}
 	else if( ParserIsToken(self,"u8",0))
 	{
-		data_type = AST_DATA_TYPE_U8;
+		type = AST_DATA_TYPE_U8;
 		ParserConsume(self);
 	}
 	else if( ParserIsToken(self,"u16",0))
 	{
-		data_type = AST_DATA_TYPE_U16;
+		type = AST_DATA_TYPE_U16;
 		ParserConsume(self);
 	}
 	else if( ParserIsToken(self,"u32",0))
 	{
-		data_type = AST_DATA_TYPE_U32;
+		type = AST_DATA_TYPE_U32;
 		ParserConsume(self);
 	}
 	else if( ParserIsToken(self,"u64",0))
 	{
-		data_type = AST_DATA_TYPE_U64;
+		type = AST_DATA_TYPE_U64;
 		ParserConsume(self);
 	}
 	else if( ParserIsToken(self,"str",0))
 	{
-		data_type = AST_DATA_TYPE_STRING;
+		type = AST_DATA_TYPE_STRING;
 		ParserConsume(self);
 	}
 	else
 	{
-		ParserFatal(self,"unsupported data type : get_data_type");
-		data_type = AST_DATA_TYPE_NONE;
+		type = AST_DATA_TYPE_NONE;
 		ParserConsume(self);
 	}
 
-	return data_type;
+	return type;
 }
 
-struct ASTType *ParserParseType(struct Parser *self)
+
+
+
+struct ASTType *ParserParsePrimaryType(struct Parser *self)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
 		return NULL;
 	}
 
-	
-	void *ast_type_type       = NULL;
+	ACHIOR_LABS_VAR_INIT(enum ASTDataType,dataType);
 
-	enum ASTDataType data_type;
+	ACHIOR_LABS_PTR_INIT(void,typeType);
+	ACHIOR_LABS_PTR_INIT(struct Token,ident);
+	ACHIOR_LABS_PTR_INIT(struct ASTType,type);
+
+	ACHIOR_LABS_STRUCT_INIT(struct LinkedList,path);
+
+
+
 	if( ParserIsType(self))
 	{
-		data_type = ParserGetDataType(self);
-		if(ACHIOR_LABS_EQUAL(data_type,AST_DATA_TYPE_NONE))
+		dataType = ParserGetDataType(self);
+
+		if(ACHIOR_LABS_EQUAL(dataType,AST_DATA_TYPE_NONE))
 		{
 			self->panicMode = true;
 			ACHIOR_LABS_SYNCHRONIZE(false);
@@ -1596,24 +1807,44 @@ struct ASTType *ParserParseType(struct Parser *self)
 	}
 	else if(ParserIsIdentifier(self))
 	{
-		data_type     = AST_DATA_TYPE_AGGREGATE;
-		ast_type_type = ParserMakeAggregateType(self,ParserConsume(self));
-	}
-	else
-	{
-		ParserFatal(self,"parse-type => unsupported data type");
-		ACHIOR_LABS_SYNCHRONIZE(false);
+		LinkedListNew(&path, self->bump);
+
+		// first identifier
+		ident = ParserConsume(self);
+
+		LinkedListPushBack(&path,ident);
+
+
+		// handle :: chain
+		while(ParserIsToken(self, "::", 0))
+		{
+			ParserConsume(self); // consume ::
+
+			if(!ParserIsIdentifier(self))
+			{
+				ParserFatal(self,ParserPeek(self,0),"expected an identifier after :: ",NULL,NULL,NULL,NULL);
+				ACHIOR_LABS_SYNCHRONIZE(false);
+				break;
+			}
+
+			ident = ParserConsume(self);
+
+			LinkedListPushBack(&path,ident);
+		}
+
+		typeType = C4MakeASTAggregateType(self->bump,path);
+		dataType = AST_DATA_TYPE_AGGREGATE;
 	}
 
 
-	struct ASTType *astType = ParserMakeType(self,data_type,ast_type_type);
+	type = C4MakeASTType(self->bump,dataType,typeType);
 
 	while(ParserIsToken(self,"*",0))
 	{
 		ParserConsume(self);
 
-		ast_type_type = ParserMakePointerType(self,astType);
-		astType      = ParserMakeType(self,AST_DATA_TYPE_POINTER,ast_type_type);
+		typeType = C4MakeASTPointerType(self->bump,type);
+		type     = C4MakeASTType(self->bump,AST_DATA_TYPE_POINTER,typeType);
 	}
 
 
@@ -1621,19 +1852,52 @@ struct ASTType *ParserParseType(struct Parser *self)
 	{
 		ParserConsume(self);
 
-		ast_type_type = ParserMakeArrayType(self,astType,ParserParseExpr(self,0));
-		astType       = ParserMakeType(self,AST_DATA_TYPE_ARRAY,ast_type_type);
+		typeType = C4MakeASTArrayType(self->bump,type,ParserParseExpr(self,0));
+		type     = C4MakeASTType(self->bump,AST_DATA_TYPE_ARRAY,typeType);
 
 		ParserExpectSymbol(self,"]","expected ] after array size");
 		ACHIOR_LABS_SYNCHRONIZE(false);
 	}
 
-	return astType;
+	return type;
 }
 
 
 
+struct ASTType *ParserParseType(struct Parser *self)
+{
+	ACHIOR_LABS_PTR_INIT(struct ASTType,baseType);
+	ACHIOR_LABS_PTR_INIT(struct ASTType,argument);
+	ACHIOR_LABS_PTR_INIT(struct ASTGenericType,generic);
 
+	ACHIOR_LABS_STRUCT_INIT(struct LinkedList,arguments);
+
+    baseType = ParserParsePrimaryType(self); 
+    // e.g. Box, i32, Foo
+
+    if (ParserIsToken(self,"<",0))
+    {
+		LinkedListNew(&arguments,self->bump);
+
+        if (! ParserIsToken(self,">",0))
+        {
+            do
+            {
+                argument = ParserParseType(self);
+                LinkedListPushBack(&arguments,argument);
+            }
+            while (ParserIsToken(self,",",0));
+        }
+
+        ParserExpectSymbol(self,">","expected a > after generic");
+
+		generic = C4MakeASTGenericType(self->bump,baseType,arguments);
+
+        return C4MakeASTType(self->bump,AST_DATA_TYPE_GENERIC,generic);
+    }
+
+    return baseType;
+}
 
 
 
@@ -1645,28 +1909,33 @@ struct ASTBlockStmt *ParserParseBlockStmt(struct Parser *self)
 		return NULL;
 	}
 
+
+	ACHIOR_LABS_STRUCT_INIT(struct LinkedList,stmts);
+
+	ACHIOR_LABS_PTR_INIT(struct ASTStatement,stmt);
+
 	
 	ParserExpectSymbol(self,":","expected a : ");
 	ACHIOR_LABS_SYNCHRONIZE(false);
 
-	struct LinkedList stmts;
 	LinkedListNew(&stmts,self->bump);
 
 
 	while(true)
 	{
-		if( ParserIsSymbol(self,":",0) || ParserAtEnd(self))
+		if(ParserAtEnd(self) || ParserIsSymbol(self,":",0))
 		{
 			break;
 		}
 
-		struct ASTStatement *stmt = ParserParseStmt(self);
+		stmt = ParserParseStmt(self);
 
 		if(ACHIOR_LABS_TRUE(self->panicMode))
 		{
 			ParserSynchronizeStmt(self);
 			continue;
 		}
+
 
 		if( ACHIOR_LABS_NULL(stmt))
 		{
@@ -1681,9 +1950,7 @@ struct ASTBlockStmt *ParserParseBlockStmt(struct Parser *self)
 	ParserExpectSymbol(self,":","expected : after block");
 	ACHIOR_LABS_SYNCHRONIZE(false);
 
-
-	struct ASTBlockStmt *ast_block = ParserMakeBlockStmt(self,stmts);
-	return ast_block;
+	return C4MakeASTBlockStmt(self->bump,stmts);
 }
 
 
@@ -1693,81 +1960,63 @@ struct ASTStatement *ParserParseStmt(struct Parser *self)
 	{
 		return NULL;
 	}
-	
-	enum ASTStatementType ast_type = AST_STATEMENT_NONE;
-	void *astStmt_val               = NULL;
-	struct Token token               = ParserPeek(self,0);
 
-	switch(token.type)
+	ACHIOR_LABS_PTR_INIT(struct Token,token);
+	
+	token = ParserPeek(self,0);
+
+	switch(TOKEN_GET_KIND(*token))
 	{
 		case TOKEN_KEYWORD_RETURN:
 		{
-			ast_type     = AST_STATEMENT_RETURN;
-			astStmt_val = (void *)ParserParseReturnStmt(self);
+			return ParserParseReturnStmt(self);
 			break;
 		}
 		case TOKEN_KEYWORD_IF:
 		{
-			ast_type     = AST_STATEMENT_IF;
-			astStmt_val = (void *)ParserParseIfStmt(self);
+			return ParserParseIfStmt(self);
 			break;
 		}
 		case TOKEN_KEYWORD_WHILE:
 		{
-			ast_type     = AST_STATEMENT_WHILE;
-			astStmt_val = (void *)ParserParseWhileStmt(self);
+			return ParserParseWhileStmt(self);
 			break;
 		}
 		case TOKEN_KEYWORD_LOOP:
 		{
-			ast_type     = AST_STATEMENT_LOOP;
-			astStmt_val = (void *)ParserParseLoopStmt(self);
+			return ParserParseLoopStmt(self);
 			break;
 		}
 		case TOKEN_KEYWORD_CONTINUE:
 		{
-			ast_type     = AST_STATEMENT_CONTINUE;
-			astStmt_val = (void *)ParserParseContinueStmt(self);
+			return ParserParseContinueStmt(self);
 			break;
 		}
 		case TOKEN_KEYWORD_BREAK:
 		{
-			ast_type     = AST_STATEMENT_BREAK;
-			astStmt_val = (void *)ParserParseBreakStmt(self);
+			return ParserParseBreakStmt(self);
 			break;
 		}
 		case TOKEN_KEYWORD_MATCH:
 		{
-			ast_type     = AST_STATEMENT_MATCH;
-			astStmt_val = (void *)ParserParseMatchStmt(self);
+			//ParserParseMatchStmt(self);
 			break;
 		}
 		default:
 		{
 			if( ParserIsType(self) || ParserParseTryVariableDecl(self) )
 			{
-				ast_type     = AST_STATEMENT_VAR_DECL;
-				astStmt_val = (void *)ParserParseVariableDecl(self);
+				return ParserParseVariableDecl(self);
 			}
 			else
 			{
-				ast_type     = AST_STATEMENT_EXPRESSION;
-				astStmt_val = (void *)ParserParseExpr(self,0);
-
+				return C4MakeASTStatement(self->bump,AST_STATEMENT_EXPRESSION,ParserParseExpr(self,0));
 			}
 			break;
 		}
 	}
 
-	if(ACHIOR_LABS_NULL(astStmt_val))
-	{
-		ParserFatal(self," unknown statement ");
-		ACHIOR_LABS_SYNCHRONIZE(false);
-	}
-
-
-	struct ASTStatement *astStmt = ParserMakeStatement(self,ast_type,astStmt_val);
-	return astStmt;
+	return NULL; // should never be reached!
 }
 
 
@@ -1805,77 +2054,84 @@ struct ASTMatchStmt *ParserParseMatchStmt(struct Parser *self)
 	}
 
 
-	//struct ASTMatchStmt *astStmt = ParserMakeMatchStmt(self);
+	//struct ASTMatchStmt *stmt = C4MakeASTMatchStmt(self);
 	return NULL;//astStmt;
 }
 
 
 
 
-struct ASTContinueStmt *ParserParseContinueStmt(struct Parser *self)
+struct ASTStatement *ParserParseContinueStmt(struct Parser *self)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
 		return NULL;
 	}
 
+	ACHIOR_LABS_PTR_INIT(struct ASTContinueStmt,stmt);
+
 	ParserExpectKeyword(self,"continue","expected continue ");
 	ACHIOR_LABS_SYNCHRONIZE(false);
 
-	struct ASTContinueStmt *astStmt = ParserMakeContinueStmt(self);
-	return astStmt;
+	stmt = C4MakeASTContinueStmt(self->bump);
+
+	return C4MakeASTStatement(self->bump,AST_STATEMENT_CONTINUE,stmt);
 }
 
 
 
 
 
-struct ASTBreakStmt *ParserParseBreakStmt(struct Parser *self)
+struct ASTStatement *ParserParseBreakStmt(struct Parser *self)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
 		return NULL;
 	}
 	
+	ACHIOR_LABS_PTR_INIT(struct ASTBreakStmt,stmt);
 
 	ParserExpectKeyword(self,"break","expected break ");
 	ACHIOR_LABS_SYNCHRONIZE(false);
 
 
-	struct ASTBreakStmt *astStmt = ParserMakeBreakStmt(self);
-	return astStmt;
+	stmt = C4MakeASTBreakStmt(self->bump);
+
+	return C4MakeASTStatement(self->bump,AST_STATEMENT_BREAK,stmt);
 }
 
 
 
 
 
-struct ASTLoopStmt *ParserParseLoopStmt(struct Parser *self)
+struct ASTStatement *ParserParseLoopStmt(struct Parser *self)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
 		return NULL;
 	}
+
+	ACHIOR_LABS_PTR_INIT(struct ASTLoopStmt,stmt);
+	ACHIOR_LABS_PTR_INIT(struct ASTBlockStmt,block);
 
 	ParserExpectKeyword(self,"loop","expected loop ");
 	ACHIOR_LABS_SYNCHRONIZE(false);
 
 
-	struct ASTBlockStmt *block      = NULL;
-
 	if(ParserIsToken(self,":",0))
 	{
 		block = ParserParseBlockStmt(self);
 	}
 	else
 	{
-		ParserFatal(self,"expected a block ':' after loop");
+		ParserFatal(self,ParserPeek(self,0),"expected a block after loop keyword",NULL,NULL,NULL,NULL);
 		ACHIOR_LABS_SYNCHRONIZE(false);
 	}
 	
 
-	struct ASTLoopStmt *astStmt = ParserMakeLoopStmt(self,block);
-	return astStmt;
+	stmt = C4MakeASTLoopStmt(self->bump,block);
+
+	return C4MakeASTStatement(self->bump,AST_STATEMENT_LOOP,stmt);
 }
 
 
@@ -1884,19 +2140,22 @@ struct ASTLoopStmt *ParserParseLoopStmt(struct Parser *self)
 
 
 
-struct ASTWhileStmt *ParserParseWhileStmt(struct Parser *self)
+struct ASTStatement *ParserParseWhileStmt(struct Parser *self)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
 		return NULL;
 	}
 
+	ACHIOR_LABS_PTR_INIT(struct ASTExpression,expr);
+	ACHIOR_LABS_PTR_INIT(struct ASTBlockStmt,block);
+	ACHIOR_LABS_PTR_INIT(struct ASTWhileStmt,stmt);
+
 	ParserExpectKeyword(self,"while","expected while ");
 	ACHIOR_LABS_SYNCHRONIZE(false);
 
 
-	struct ASTExpression *expr       = ParserParseExpr(self,0);
-	struct ASTBlockStmt *block      = NULL;
+	expr = ParserParseExpr(self,0);
 
 	if(ParserIsToken(self,":",0))
 	{
@@ -1904,13 +2163,14 @@ struct ASTWhileStmt *ParserParseWhileStmt(struct Parser *self)
 	}
 	else
 	{
-		ParserFatal(self,"expected a block ':' after while");
+		ParserFatal(self,ParserPeek(self,0),"expected a block after condition in while keyword",NULL,NULL,NULL,NULL);
 		ACHIOR_LABS_SYNCHRONIZE(false);
 	}
 	
 
-	struct ASTWhileStmt *astStmt = ParserMakeWhileStmt(self,expr,block);
-	return astStmt;
+	stmt = C4MakeASTWhileStmt(self->bump,expr,block);
+
+	return C4MakeASTStatement(self->bump,AST_STATEMENT_WHILE,stmt);
 }
 
 
@@ -1925,12 +2185,11 @@ struct ASTIfElse *ParserParseIfElse(struct Parser *self)
 		return NULL;
 	}
 
+	ACHIOR_LABS_PTR_INIT(struct ASTBlockStmt,block);
 
 	ParserExpectKeyword(self,"else","expected else ");
 	ACHIOR_LABS_SYNCHRONIZE(false);
 
-
-	struct ASTBlockStmt *block = NULL;
 
 	if(ParserIsToken(self,":",0))
 	{
@@ -1938,12 +2197,11 @@ struct ASTIfElse *ParserParseIfElse(struct Parser *self)
 	}
 	else
 	{
-		ParserFatal(self,"expected a block ':' after loop");
+		ParserFatal(self,ParserPeek(self,0),"expected a block after else",NULL,NULL,NULL,NULL);
 		ACHIOR_LABS_SYNCHRONIZE(false);
 	}
 
-	struct ASTIfElse *ast_else = ParserMakeIfElse(self,block);
-	return ast_else;
+	return C4MakeASTIfElse(self->bump,block);
 }
 
 
@@ -1956,13 +2214,14 @@ struct ASTIfElif *ParserParseIfElif(struct Parser *self)
 		return NULL;
 	}
 
+	ACHIOR_LABS_PTR_INIT(struct ASTExpression,expr);
+	ACHIOR_LABS_PTR_INIT(struct ASTBlockStmt,block);
 
 	ParserExpectKeyword(self,"elif","expected elif ");
 	ACHIOR_LABS_SYNCHRONIZE(false);
 
 
-	struct ASTExpression *expr  = ParserParseExpr(self,0);
-	struct ASTBlockStmt *block = NULL;
+	expr = ParserParseExpr(self,0);
 
 	if(ParserIsToken(self,":",0))
 	{
@@ -1970,78 +2229,85 @@ struct ASTIfElif *ParserParseIfElif(struct Parser *self)
 	}
 	else
 	{
-		ParserFatal(self,"expected a block ':' after loop");
+		ParserFatal(self,ParserPeek(self,0),"expected a block after elif keyword",NULL,NULL,NULL,NULL);
 		ACHIOR_LABS_SYNCHRONIZE(false);
 	}
 
-	struct ASTIfElif *ast_elif = ParserMakeIfElif(self,expr,block);
-	return ast_elif;
+	return C4MakeASTIfElif(self->bump,expr,block);
 }
 
 
-struct ASTIfStmt *ParserParseIfStmt(struct Parser *self)
+struct ASTStatement *ParserParseIfStmt(struct Parser *self)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
 		return NULL;
 	}
 
+	ACHIOR_LABS_PTR_INIT(struct ASTExpression,expr);
+	ACHIOR_LABS_PTR_INIT(struct ASTBlockStmt,block);
+	ACHIOR_LABS_PTR_INIT(struct ASTIfStmt,stmt);
+	ACHIOR_LABS_PTR_INIT(struct ASTIfElif,elifBlock);
+	ACHIOR_LABS_PTR_INIT(struct ASTIfElse,elseBlock);
+
+	ACHIOR_LABS_STRUCT_INIT(struct LinkedList,elifs);
 
 	ParserExpectKeyword(self,"if","expected if ");
 	ACHIOR_LABS_SYNCHRONIZE(false);
 
 
-	struct ASTExpression *expr       = ParserParseExpr(self,0);
-	struct ASTBlockStmt *block      = NULL;
+	expr = ParserParseExpr(self,0);
+	ACHIOR_LABS_SYNCHRONIZE(false);
 
 	if(ParserIsToken(self,":",0))
 	{
 		block = ParserParseBlockStmt(self);
+		ACHIOR_LABS_SYNCHRONIZE(false);
 	}
 	else
 	{
-		ParserFatal(self,"expected a block ':' after loop");
+		ParserFatal(self,ParserPeek(self,0),"expected a block after if keyword",NULL,NULL,NULL,NULL);puts("10");
 		ACHIOR_LABS_SYNCHRONIZE(false);
 	}
+
 	
-	struct LinkedList elifList;
-	LinkedListNew(&elifList,self->bump);
+	LinkedListNew(&elifs,self->bump);
 
 	while(ParserIsToken(self,"elif",0))
 	{
-		struct ASTIfElif *ast_elif = ParserParseIfElif(self);
-		LinkedListPushBack(&elifList,ast_elif);
+		elifBlock = ParserParseIfElif(self);
+		LinkedListPushBack(&elifs,elifBlock);
 	}
 
-
-	struct ASTIfElse *ast_else = NULL;
 	if(ParserIsToken(self,"else",0))
 	{
-		ast_else = ParserParseIfElse(self);
+		elseBlock = ParserParseIfElse(self);
 	}
 
 
-	struct ASTIfStmt *astStmt = ParserMakeIfStmt(self,expr,block,elifList,ast_else);
+	stmt = C4MakeASTIfStmt(self->bump,expr,block,elifs,elseBlock);
 
-	return astStmt;
+	return C4MakeASTStatement(self->bump,AST_STATEMENT_IF,stmt);
 }
 
 
 
 
-struct ASTReturnStmt *ParserParseReturnStmt(struct Parser *self)
+struct ASTStatement *ParserParseReturnStmt(struct Parser *self)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
 		return NULL;
 	}
 
+	ACHIOR_LABS_PTR_INIT(struct ASTReturnStmt,stmt);
+
 	ParserExpectKeyword(self,"return","expected return ");
 	ACHIOR_LABS_SYNCHRONIZE(false);	
 
-	struct ASTExpression *expr      = ParserParseExpr(self,0);
-	struct ASTReturnStmt *astStmt = ParserMakeReturnStmt(self,expr);
-	return astStmt;
+	stmt = C4MakeASTReturnStmt(self->bump,ParserParseExpr(self,0));
+
+	return C4MakeASTStatement(self->bump,AST_STATEMENT_RETURN,stmt);
 }
 
 
@@ -2052,79 +2318,78 @@ bool ParserParseTryVariableDecl(struct Parser *self)
 		return false;
 	}
 
-	u64 index      = self->index;
-	u64 lookAhead = 0;
+	ACHIOR_LABS_VAR_INIT(u64,saved);
+	ACHIOR_LABS_VAR_INIT(bool,panicMode);
+	ACHIOR_LABS_VAR_INIT(bool,hasErrors);
+	ACHIOR_LABS_VAR_INIT(bool,isVarDecl);
+	ACHIOR_LABS_PTR_INIT(struct ASTType,type);
 
-	if(ParserIsIdentifier(self))
+	panicMode = self->panicMode;
+	hasErrors = self->hasErrors;
+	saved     = self->index;
+	type      = ParserParseType(self);
+
+	if(ACHIOR_LABS_NULL(type))
 	{
-		lookAhead++;
-		while(ParserIsToken(self,"*",lookAhead))
-		{
-			lookAhead++;
-		}
+		self->panicMode = panicMode;
+		self->hasErrors = hasErrors;
 
-		while(ParserIsToken(self,"[",lookAhead))
-		{
-			lookAhead++;
-			while(! ParserIsToken(self,"]",lookAhead) && !ACHIOR_LABS_EQUAL(index,self->index))
-			{
-				lookAhead++;
-			}
-
-			if(ACHIOR_LABS_EQUAL(index,self->index))
-			{
-				break;
-			}
-		}
-
-		if(ParserIsTokenType(self,TOKEN_IDENT,lookAhead))
-		{
-			return true;
-		}
+		return false;
 	}
-	
-	
-	return false;
+
+	isVarDecl       = ParserIsTokenKind(self, TOKEN_IDENT, 0) && !ParserIsToken(self, "(", 1); 
+	self->panicMode = panicMode;
+	self->hasErrors = hasErrors;
+	self->index     = saved;
+
+	return isVarDecl;
 }
 
 
-struct ASTVariableDecl *ParserParseVariableDecl(struct Parser *self)
+struct ASTStatement *ParserParseVariableDecl(struct Parser *self)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
 		return NULL;
 	}
 
-	struct ASTType *ast_type = ParserParseType(self);
-	if( ACHIOR_LABS_NULL(ast_type))
+	ACHIOR_LABS_PTR_INIT(struct ASTType,type);
+	ACHIOR_LABS_PTR_INIT(struct Token,ident);
+	ACHIOR_LABS_PTR_INIT(struct ASTVariableDeclInit,init);
+	ACHIOR_LABS_PTR_INIT(struct ASTVariableDecl,stmt);
+
+	type = ParserParseType(self);
+
+	if( ACHIOR_LABS_NULL(type))
 	{
 		ACHIOR_LABS_PRINT("null argument type");
 		ACHIOR_LABS_SYNCHRONIZE(false);
 	}
 
-	struct Token ident;
+
 	if( ParserIsIdentifier(self))
 	{
 		ident = ParserConsume(self);
 	}
 	else
 	{
-		ParserFatal(self,"expected an identifier after type");
+		ParserFatal(self,ParserPeek(self,0),"expected an identifier after type",NULL,NULL,NULL,NULL);
 		ACHIOR_LABS_SYNCHRONIZE(false);
 	}
 
-	struct ASTVariableDeclInit *init = NULL;
+
 	if(ParserIsToken(self,"=",0))
 	{
 		ParserExpectSymbol(self,"=","expected =");
 		ACHIOR_LABS_SYNCHRONIZE(false);
 
-		init = ParserParseVariableDeclInit(self,ast_type);
+		init = ParserParseVariableDeclInit(self,type);
 	}
 
 
-	struct ASTVariableDecl *astStmt = ParserMakeVariableDecl(self,ast_type,ident,init);
-	return astStmt;
+	stmt = C4MakeASTVariableDecl(self->bump,type,ident,init);
+
+	return C4MakeASTStatement(self->bump,AST_STATEMENT_VAR_DECL,stmt);
 }
 
 
@@ -2154,10 +2419,11 @@ struct ASTVariableDeclInit *ParserParseVariableDeclSingleInit(struct Parser *sel
 		return NULL;
 	}
 
-	struct ASTVariableDeclSingleInit *single_init = ParserMakeVariableDeclSingleInit(self,ParserParseExpr(self,0));
-	struct ASTVariableDeclInit *init               = ParserMakeVariableDeclInit(self,AST_VAR_DECL_INIT_SINGLE_INIT,single_init);
+	ACHIOR_LABS_PTR_INIT(struct ASTVariableDeclSingleInit,init);
 
-	return init;
+	init = C4MakeASTVariableDeclSingleInit(self->bump,ParserParseExpr(self,0));
+
+	return C4MakeASTVariableDeclInit(self->bump,AST_VAR_DECL_INIT_SINGLE_INIT,init);
 }
 
 
@@ -2168,17 +2434,21 @@ struct ASTVariableDeclInit *ParserParseVariableDeclArrayInit(struct Parser *self
 		return NULL;
 	}
 
-	struct ASTArrayType *astArrayType = (struct ASTArrayType *)type->type;
+	ACHIOR_LABS_PTR_INIT(struct ASTArrayType,arrayType);
+	ACHIOR_LABS_PTR_INIT(struct ASTVariableDeclInit,init);
+	ACHIOR_LABS_PTR_INIT(struct ASTVariableDeclArrayInit,arrayInit);
 
-	struct LinkedList elements;
+	ACHIOR_LABS_STRUCT_INIT(struct LinkedList,elements);
+
+	arrayType = type->type;
+
 	LinkedListNew(&elements,self->bump);
-
 	ParserExpectSymbol(self,"[","expected [ in array initialization");
 
 	while(true)
 	{
-		struct ASTVariableDeclInit *ast_var_init = ParserParseVariableDeclInit(self,astArrayType->type);
-		LinkedListPushBack(&elements,ast_var_init);
+		init = ParserParseVariableDeclInit(self,arrayType->type);
+		LinkedListPushBack(&elements,init);
 
 		if(ParserIsToken(self,"]",0))
 		{
@@ -2191,16 +2461,15 @@ struct ASTVariableDeclInit *ParserParseVariableDeclArrayInit(struct Parser *self
 	ParserExpectSymbol(self,"]","expected ] after array initialization");
 
 
-	struct ASTVariableDeclArrayInit *array_init = ParserMakeVariableDeclArrayInit(self,elements);
-	struct ASTVariableDeclInit *init             = ParserMakeVariableDeclInit(self,AST_VAR_DECL_INIT_ARRAY_INIT,array_init);
+	arrayInit = C4MakeASTVariableDeclArrayInit(self->bump,elements);
 
-	return init;
+	return C4MakeASTVariableDeclInit(self->bump,AST_VAR_DECL_INIT_ARRAY_INIT,arrayInit);
 }
 
 
-enum ASTAssignmentOperator ParserGetAssignmentOperator(struct Parser *self,struct Token token)
+enum ASTAssignmentOperator ParserGetAssignmentOperator(struct Parser *self,struct Token *token)
 {
-	switch(token.type)
+	switch(TOKEN_GET_KIND(*token))
 	{
 		case TOKEN_ASSIGN:
 		{
@@ -2260,12 +2529,18 @@ bool ParserIsBinary(struct Parser *self)
 		   ParserIsToken(self,"*",0)  || 
 		   ParserIsToken(self,"/",0)  || 
 		   ParserIsToken(self,"%%",0) || 
+		   ParserIsToken(self,"<<",0)  || 
+		   ParserIsToken(self,">>",0)  || 
 		   ParserIsToken(self,"<",0)  || 
 		   ParserIsToken(self,"<=",0) || 
 		   ParserIsToken(self,">",0)  || 
 		   ParserIsToken(self,">=",0) || 
+		   ParserIsToken(self,"==",0) ||
+		   ParserIsToken(self,"!=",0) ||  
 		   ParserIsToken(self,"&&",0) || 
 		   ParserIsToken(self,"||",0) || 
+		   ParserIsToken(self,"&",0) || 
+		   ParserIsToken(self,"|",0) || 
 		   ParserIs_assignment(self)   || 
 		   ParserIsToken(self,"as",0);
 }
@@ -2273,9 +2548,9 @@ bool ParserIsBinary(struct Parser *self)
 
 
 
-enum ASTBinaryOperator ParserGetBinaryOperator(struct Parser *self,struct Token token)
+enum ASTBinaryOperator ParserGetBinaryOperator(struct Parser *self,struct Token *token)
 {
-	switch(token.type)
+	switch(TOKEN_GET_KIND(*token))
 	{
 		case TOKEN_ADD:
 		{
@@ -2322,6 +2597,16 @@ enum ASTBinaryOperator ParserGetBinaryOperator(struct Parser *self,struct Token 
 			return AST_BINARY_OPERATOR_GREATER_EQUAL;
 			break;
 		}
+		case TOKEN_EQUAL:
+		{
+			return AST_BINARY_OPERATOR_EQUAL;
+			break;
+		}
+		case TOKEN_NOT_EQUAL:
+		{
+			return AST_BINARY_OPERATOR_NOT_EQUAL;
+			break;
+		}
 		case TOKEN_AND:
 		{
 			return AST_BINARY_OPERATOR_AND;
@@ -2330,6 +2615,26 @@ enum ASTBinaryOperator ParserGetBinaryOperator(struct Parser *self,struct Token 
 		case TOKEN_OR:
 		{
 			return AST_BINARY_OPERATOR_OR;
+			break;
+		}
+		case TOKEN_BITWISE_AND:
+		{
+			return AST_BINARY_OPERATOR_BITWISE_AND;
+			break;
+		}
+		case TOKEN_BITWISE_OR:
+		{
+			return AST_BINARY_OPERATOR_BITWISE_OR;
+			break;
+		}
+		case TOKEN_LEFT_SHIFT:
+		{
+			return AST_BINARY_OPERATOR_BITWISE_LEFT_SHIFT;
+			break;
+		}
+		case TOKEN_RIGHT_SHIFT:
+		{
+			return AST_BINARY_OPERATOR_BITWISE_RIGHT_SHIFT;
 			break;
 		}
 		default:
@@ -2355,6 +2660,10 @@ u64 ParserGetPrecedence(struct Parser *self)
 	else if(ParserIsToken(self,"*",0) || ParserIsToken(self,"/",0) || ParserIsToken(self,"%%",0))
 	{
 		return AST_PRECEDENCE_MUL;
+	}
+	else if(ParserIsToken(self,">>",0) || ParserIsToken(self,"<<",0))
+	{
+		return AST_PRECEDENCE_SHIFT;
 	}
 	else if(ParserIsToken(self,"<",0) || ParserIsToken(self,"<=",0) || ParserIsToken(self,">",0) || ParserIsToken(self,">=",0))
 	{
@@ -2388,9 +2697,9 @@ bool ParserIsUnary(struct Parser *self)
 }
 
 
-enum ASTUnaryOperator ParserGetUnaryOperator(struct Parser *self,struct Token token)
+enum ASTUnaryOperator ParserGetUnaryOperator(struct Parser *self,struct Token *token)
 {
-	switch(token.type)
+	switch(TOKEN_GET_KIND(*token))
 	{
 		case TOKEN_SUB:
 		{
@@ -2412,23 +2721,35 @@ enum ASTUnaryOperator ParserGetUnaryOperator(struct Parser *self,struct Token to
 
 struct ASTExpression *ParserParseExpr(struct Parser *self,u64 min_precedence)
 {
-	struct ASTExpression *ast_lhs = ParserParseUnary(self);
-	
+	ACHIOR_LABS_PTR_INIT(struct ASTExpression,lhs);
+	ACHIOR_LABS_PTR_INIT(struct ASTExpression,rhs);
+	ACHIOR_LABS_PTR_INIT(struct Token,token);
 
+	ACHIOR_LABS_VAR_INIT(u64,precedence);
+	ACHIOR_LABS_VAR_INIT(enum ASTCastOperator,op);
+
+	lhs = ParserParseUnary(self);
+
+	
 	while ( ParserIsBinary(self) && ParserGetPrecedence(self) >= min_precedence)
 	{
-		u64 precedence = ParserGetPrecedence(self);
+		precedence = ParserGetPrecedence(self);
+
 		if(ParserIsToken(self,"as",0))
 		{
-			struct Token token        = ParserConsume(self);
-			enum ASTCastOperator op = AST_CAST_OPERATOR_WIDEN;
+			ACHIOR_LABS_PTR_INIT(struct ASTType,type);
+			ACHIOR_LABS_PTR_INIT(struct ASTCastExpr,innerExpr);
+
+
+			token = ParserConsume(self);
+			op    = AST_CAST_OPERATOR_WIDEN;
 
 			if(ParserIsToken(self,"<",0))
 			{
 				ParserConsume(self);
 				token = ParserConsume(self); // add a check for if is identifier
 
-				if(ACHIOR_LABS_STRCMP(token.value.data,"narrow") == 0)
+				if(ACHIOR_LABS_STRCMP(TOKEN_GET_VALUE_DATA(*token),"narrow") == 0)
 				{
 					op = AST_CAST_OPERATOR_NARROW;
 				}
@@ -2444,43 +2765,48 @@ struct ASTExpression *ParserParseExpr(struct Parser *self,u64 min_precedence)
 				}
 			}
 
-			struct ASTType *ast_type           = ParserParseType(self);
-			struct ASTCastExpr *ASTCastExpr = ParserMakeCastExpr(self,ast_lhs,op,ast_type);
-			struct ASTExpression *astExpr     = ParserMakeExpression(self,AST_EXPRESSION_CAST,ASTCastExpr);
-			ast_lhs                             = astExpr;
+			type      = ParserParseType(self);
+			innerExpr = C4MakeASTCastExpr(self->bump,lhs,op,type);
+			lhs       = C4MakeASTExpression(self->bump,AST_EXPRESSION_CAST,innerExpr);
 		}
 		else if(ParserIs_assignment(self))
 		{
-			struct Token token                              = ParserConsume(self);
-			struct ASTExpression *ast_rhs                  = ParserParseExpr(self,precedence);
-			struct ASTAssignmentExpr *astAssignmentExpr = ParserMakeAssignmentExpr(self,ast_lhs,ParserGetAssignmentOperator(self,token),ast_rhs);
-			struct ASTExpression *astExpr                 = ParserMakeExpression(self,AST_EXPRESSION_ASSIGNMENT,astAssignmentExpr);
-			ast_lhs                                         = astExpr;
+			ACHIOR_LABS_PTR_INIT(struct ASTAssignmentExpr,innerExpr);
+
+			token     = ParserConsume(self);
+			rhs       = ParserParseExpr(self,precedence);
+			innerExpr = C4MakeASTAssignmentExpr(self->bump,lhs,ParserGetAssignmentOperator(self,token),rhs);
+			lhs       = C4MakeASTExpression(self->bump,AST_EXPRESSION_ASSIGNMENT,innerExpr);
 		}
 		else
 		{
-			struct Token token                      = ParserConsume(self);
-			struct ASTExpression *ast_rhs          = ParserParseExpr(self,precedence + 1);
-			struct ASTBinaryExpr *ast_binaryExpr = ParserMakeBinaryExpr(self,ast_lhs,ParserGetBinaryOperator(self,token),ast_rhs);
-			struct ASTExpression *astExpr         = ParserMakeExpression(self,AST_EXPRESSION_BINARY,ast_binaryExpr);
-			ast_lhs                                 = astExpr;
+			ACHIOR_LABS_PTR_INIT(struct ASTBinaryExpr,innerExpr);
+
+			token     = ParserConsume(self);
+			rhs       = ParserParseExpr(self,precedence + 1);
+			innerExpr = C4MakeASTBinaryExpr(self->bump,lhs,ParserGetBinaryOperator(self,token),rhs);
+			lhs       = C4MakeASTExpression(self->bump,AST_EXPRESSION_BINARY,innerExpr);
 		}
 
 	}
 
-	return ast_lhs;
+	return lhs;
 }
 
 struct ASTExpression *ParserParseUnary(struct Parser *self)
 {
 	if (ParserIsUnary(self))
 	{
-		enum ASTUnaryOperator op       = ParserGetUnaryOperator(self,ParserConsume(self));
-		struct ASTExpression *expr1     = ParserParseUnary(self);
-		struct ASTUnaryExpr *astExpr2 = ParserMakeUnaryExpr(self,op,expr1);
-		struct ASTExpression *astExpr  = ParserMakeExpression(self,AST_EXPRESSION_UNARY,astExpr2);
+		ACHIOR_LABS_PTR_INIT(struct ASTExpression,expr);
+		ACHIOR_LABS_PTR_INIT(struct ASTUnaryExpr,innerExpr);
+		ACHIOR_LABS_VAR_INIT(enum ASTUnaryOperator,op);
 
-		return astExpr;
+
+		op        = ParserGetUnaryOperator(self,ParserConsume(self));
+		expr      = ParserParseUnary(self);
+		innerExpr = C4MakeASTUnaryExpr(self->bump,op,expr);
+		
+		return C4MakeASTExpression(self->bump,AST_EXPRESSION_UNARY,innerExpr);
 	}
 
 	return ParserParsePostfix(self);
@@ -2490,21 +2816,80 @@ struct ASTExpression *ParserParseUnary(struct Parser *self)
 
 struct ASTExpression *ParserParsePostfix(struct Parser *self)
 {
-	struct ASTExpression *astExpr = ParserParsePrimary(self);
+	struct ASTExpression *expr = ParserParsePrimary(self);
 
 	while(true)
 	{
-		if(ParserIsToken(self,"(",0))
+		if(ParserIsToken(self,"::",0))
 		{
+			ACHIOR_LABS_PTR_INIT(struct ASTPathExpr,innerExpr);
+			ACHIOR_LABS_PTR_INIT(struct ASTVariableExpr,variableExpr);
+			ACHIOR_LABS_VAR_INIT(bool,isFunction);
+			
+			ACHIOR_LABS_STRUCT_INIT(struct LinkedList,path);
+			ACHIOR_LABS_STRUCT_INIT(struct LinkedList,arguments);
+
+			variableExpr = expr->expr;
+			
+			LinkedListNew(&path,self->bump);
+			LinkedListPushBack(&path,variableExpr->ident);
+
+			while(ParserIsToken(self,"::",0))
+			{
+				ParserExpectSymbol(self,"::","expected ::");
+				ACHIOR_LABS_SYNCHRONIZE(false);
+
+				if(!ParserIsIdentifier(self))
+				{
+					break;
+				}
+
+				LinkedListPushBack(&path,ParserConsume(self));
+			}
+
+			isFunction = false;
+
+			LinkedListNew(&arguments,self->bump);
+
+			if(ParserIsToken(self,"(",0))
+			{
+				ParserExpectSymbol(self,"(","expected (");
+				ACHIOR_LABS_SYNCHRONIZE(false);
+
+				
+				while(!ParserIsToken(self,")",0))
+				{
+					LinkedListPushBack(&arguments,ParserParseExpr(self,0));
+					if(ParserIsToken(self,")",0))
+					{
+						break;
+					}
+
+					ParserExpectSymbol(self,",","expected a , after an argument in function call");
+					ACHIOR_LABS_SYNCHRONIZE(false);
+				}
+
+				isFunction = true;
+				ParserExpectSymbol(self,")","expected )");
+				ACHIOR_LABS_SYNCHRONIZE(false);	
+			}
+
+			innerExpr = C4MakeASTPathExpr(self->bump,path,isFunction,arguments);
+			expr      = C4MakeASTExpression(self->bump, AST_EXPRESSION_PATH,innerExpr);
+		}
+		else if(ParserIsToken(self,"(",0))
+		{
+			ACHIOR_LABS_PTR_INIT(struct ASTFunctionCallExpr,innerExpr);
+			ACHIOR_LABS_STRUCT_INIT(struct LinkedList,arguments);
+
 			ParserExpectSymbol(self,"(","expected (");
 			ACHIOR_LABS_SYNCHRONIZE(false);
 
-			struct LinkedList LinkedList;
-			LinkedListNew(&LinkedList,self->bump);
+			LinkedListNew(&arguments,self->bump);
 
 			while(!ParserIsToken(self,")",0))
 			{
-				LinkedListPushBack(&LinkedList,ParserParseExpr(self,0));
+				LinkedListPushBack(&arguments,ParserParseExpr(self,0));
 				if(ParserIsToken(self,")",0))
 				{
 					break;
@@ -2517,16 +2902,16 @@ struct ASTExpression *ParserParsePostfix(struct Parser *self)
 			ParserExpectSymbol(self,")","expected )");
 			ACHIOR_LABS_SYNCHRONIZE(false);
 			
-			struct ASTFunctionCallExpr *ASTFunctionCallExpr = ParserMakeFunctionCallExpr(self,astExpr,LinkedList);
-			astExpr                                              = ParserMakeExpression(self,AST_EXPRESSION_FUNCTION_CALL,ASTFunctionCallExpr);
-
+			innerExpr = C4MakeASTFunctionCallExpr(self->bump,expr,arguments);
+			expr      = C4MakeASTExpression(self->bump,AST_EXPRESSION_FUNCTION_CALL,innerExpr);
 		}
 		else if(ParserIsToken(self,".",0))
 		{
+			ACHIOR_LABS_PTR_INIT(struct Token,member);
+			ACHIOR_LABS_STRUCT_INIT(struct LinkedList,arguments);
+
 			ParserExpectSymbol(self,".","expected .");
 			ACHIOR_LABS_SYNCHRONIZE(false);
-
-			struct Token member;
 
 			// check if we have a function name,raise and error if not
 			if( ParserIsIdentifier(self))
@@ -2535,33 +2920,121 @@ struct ASTExpression *ParserParsePostfix(struct Parser *self)
 			}
 			else
 			{
-				ParserFatal(self,"expected an identifier after .");
+				ParserFatal(self,ParserPeek(self,0),"expected an identifier after . ",NULL,NULL,NULL,NULL);
 				ACHIOR_LABS_SYNCHRONIZE(true);
 			}
 
+			if(ParserIsToken(self,"(",0))
+			{
+				ACHIOR_LABS_PTR_INIT(struct ASTMethodExpr,innerExpr);
 
-			struct ASTStructAccessExpr *ast_structExpr = ParserMakeStructAccessExpr(self,astExpr,member); 
-			astExpr                                       = ParserMakeExpression(self,AST_EXPRESSION_STRUCT_ACCESS,ast_structExpr);
+				ParserExpectSymbol(self,"(","expected (");
+				ACHIOR_LABS_SYNCHRONIZE(false);
+
+				LinkedListNew(&arguments,self->bump);
+
+				while(!ParserIsToken(self,")",0))
+				{
+					LinkedListPushBack(&arguments,ParserParseExpr(self,0));
+					if(ParserIsToken(self,")",0))
+					{
+						break;
+					}
+
+					ParserExpectSymbol(self,",","expected a , after an argument in function call");
+					ACHIOR_LABS_SYNCHRONIZE(false);
+				}
+
+				ParserExpectSymbol(self,")","expected )");
+				ACHIOR_LABS_SYNCHRONIZE(false);
+				
+				innerExpr = C4MakeASTMethodExpr(self->bump,expr,member,arguments);
+				expr      = C4MakeASTExpression(self->bump,AST_EXPRESSION_METHOD,innerExpr);
+			}
+			else
+			{
+				ACHIOR_LABS_PTR_INIT(struct ASTStructAccessExpr,innerExpr);
+
+				innerExpr = C4MakeASTStructAccessExpr(self->bump,expr,member); 
+				expr      = C4MakeASTExpression(self->bump,AST_EXPRESSION_STRUCT_ACCESS,innerExpr);
+			}
+		}
+		else if(ParserIsToken(self,"->",0))
+		{
+			ACHIOR_LABS_PTR_INIT(struct Token,member);
+
+			ACHIOR_LABS_STRUCT_INIT(struct LinkedList,arguments);
+
+			ParserExpectSymbol(self,"->","expected ->");
+			ACHIOR_LABS_SYNCHRONIZE(false);
+
+			// check if we have a function name,raise and error if not
+			if( ParserIsIdentifier(self))
+			{
+				member = ParserConsume(self);
+			}
+			else
+			{
+				ParserFatal(self,ParserPeek(self,0),"expected an identifier after -> ",NULL,NULL,NULL,NULL);
+				ACHIOR_LABS_SYNCHRONIZE(true);
+			}
+
+			if(ParserIsToken(self,"(",0))
+			{
+				ACHIOR_LABS_PTR_INIT(struct ASTMethodExpr,innerExpr);
+
+				ParserExpectSymbol(self,"(","expected (");
+				ACHIOR_LABS_SYNCHRONIZE(false);
+
+				LinkedListNew(&arguments,self->bump);
+
+				while(!ParserIsToken(self,")",0))
+				{
+					LinkedListPushBack(&arguments,ParserParseExpr(self,0));
+					if(ParserIsToken(self,")",0))
+					{
+						break;
+					}
+
+					ParserExpectSymbol(self,",","expected a , after an argument in function call");
+					ACHIOR_LABS_SYNCHRONIZE(false);
+				}
+
+				ParserExpectSymbol(self,")","expected )");
+				ACHIOR_LABS_SYNCHRONIZE(false);
+				
+				innerExpr = C4MakeASTMethodExpr(self->bump,expr,member,arguments);
+				expr      = C4MakeASTExpression(self->bump,AST_EXPRESSION_METHOD,innerExpr);
+			}
+			else
+			{
+				ACHIOR_LABS_PTR_INIT(struct ASTStructPointerAccessExpr,innerExpr);
+
+				innerExpr = C4MakeASTStructPointerAccessExpr(self->bump,expr,member); 
+				expr      = C4MakeASTExpression(self->bump,AST_EXPRESSION_STRUCT_POINTER_ACCESS,innerExpr);
+			}
 		}
 		else if(ParserIsToken(self,"[",0))
 		{
+			ACHIOR_LABS_PTR_INIT(struct ASTSubscriptExpr,innerExpr);
+
 			ParserExpectSymbol(self,"[","expected [");
 			ACHIOR_LABS_SYNCHRONIZE(false);
 
-			struct ASTSubscriptExpr *ast_subscriptExpr = ParserMakeSubscriptExpr(self,astExpr,ParserParseExpr(self,0));
+			innerExpr = C4MakeASTSubscriptExpr(self->bump,expr,ParserParseExpr(self,0));
 
 			ParserExpectSymbol(self,"]","expected ]");
 			ACHIOR_LABS_SYNCHRONIZE(false);
 
-			astExpr = ParserMakeExpression(self,AST_EXPRESSION_SUBSCRIPT,ast_subscriptExpr);
+			expr = C4MakeASTExpression(self->bump,AST_EXPRESSION_SUBSCRIPT,innerExpr);
 			
 		}
 		else if(ParserIsToken(self,"@",0))
 		{
+			ACHIOR_LABS_PTR_INIT(struct Token,ident);
+
 			ParserExpectSymbol(self,"@","expected @");
 			ACHIOR_LABS_SYNCHRONIZE(false);
-
-			struct Token ident;
 
 			// check if we have a function name,raise and error if not
 			if( ParserIsIdentifier(self))
@@ -2570,108 +3043,124 @@ struct ASTExpression *ParserParsePostfix(struct Parser *self)
 			}
 			else
 			{
-				ParserFatal(self,"expected an identifier after fn");
+				ParserFatal(self,ParserPeek(self,0),"expected an identifier after @ ",NULL,NULL,NULL,NULL);
 				ACHIOR_LABS_SYNCHRONIZE(true);
 			}
 
-			if(ACHIOR_LABS_STRCMP(ident.value.data,"read") == 0)
+			if(ACHIOR_LABS_STRCMP(TOKEN_GET_VALUE_DATA(*ident),"read") == 0)
 			{
+				ACHIOR_LABS_PTR_INIT(struct ASTPtrReadExpr,innerExpr);
+
 				ParserExpectSymbol(self,"(","expected (");
 				ACHIOR_LABS_SYNCHRONIZE(false);
 
 				ParserExpectSymbol(self,")","expected )");
 				ACHIOR_LABS_SYNCHRONIZE(false);
 
-				struct ASTPtrReadExpr *ast_ptr_readExpr = ParserMakePtrReadExpr(self,astExpr);
-				astExpr                                    = ParserMakeExpression(self,AST_EXPRESSION_PTR_READ,ast_ptr_readExpr);
+				innerExpr = C4MakeASTPtrReadExpr(self->bump,expr);
+				expr      = C4MakeASTExpression(self->bump,AST_EXPRESSION_PTR_READ,innerExpr);
 
 			}
-			else if(ACHIOR_LABS_STRCMP(ident.value.data,"write") == 0)
+			else if(ACHIOR_LABS_STRCMP(TOKEN_GET_VALUE_DATA(*ident),"write") == 0)
 			{
+				ACHIOR_LABS_PTR_INIT(struct ASTPtrWriteExpr,innerExpr);
+
 				ParserExpectSymbol(self,"(","expected (");
 				ACHIOR_LABS_SYNCHRONIZE(false);
 
-				struct ASTPtrWriteExpr *ast_ptr_writeExpr = ParserMakePtrWriteExpr(self,astExpr,ParserParseExpr(self,0));
+				innerExpr = C4MakeASTPtrWriteExpr(self->bump,expr,ParserParseExpr(self,0));
 
 				ParserExpectSymbol(self,")","expected )");
 				ACHIOR_LABS_SYNCHRONIZE(false);
 
-				astExpr = ParserMakeExpression(self,AST_EXPRESSION_PTR_WRITE,ast_ptr_writeExpr);
+				expr = C4MakeASTExpression(self->bump,AST_EXPRESSION_PTR_WRITE,innerExpr);
 			}
-			else if(ACHIOR_LABS_STRCMP(ident.value.data,"offset") == 0)
+			else if(ACHIOR_LABS_STRCMP(TOKEN_GET_VALUE_DATA(*ident),"offset") == 0)
 			{
+				ACHIOR_LABS_PTR_INIT(struct ASTPtrOffsetExpr,innerExpr);
+
 				ParserExpectSymbol(self,"(","expected (");
 				ACHIOR_LABS_SYNCHRONIZE(false);
 
-				struct ASTPtrOffsetExpr *ast_ptrOffsetExpr = ParserMakePtrOffsetExpr(self,astExpr,ParserParseExpr(self,0));
+				innerExpr = C4MakeASTPtrOffsetExpr(self->bump,expr,ParserParseExpr(self,0));
 
 				ParserExpectSymbol(self,")","expected )");
 				ACHIOR_LABS_SYNCHRONIZE(false);
 
-				astExpr = ParserMakeExpression(self,AST_EXPRESSION_PTR_OFFSET,ast_ptrOffsetExpr);
+				expr = C4MakeASTExpression(self->bump,AST_EXPRESSION_PTR_OFFSET,innerExpr);
 			}
-			else if(ACHIOR_LABS_STRCMP(ident.value.data,"byte_offset") == 0)
+			else if(ACHIOR_LABS_STRCMP(TOKEN_GET_VALUE_DATA(*ident),"byte_offset") == 0)
 			{
+				ACHIOR_LABS_PTR_INIT(struct ASTPtrByteOffsetExpr,innerExpr);
+
 				ParserExpectSymbol(self,"(","expected (");
 				ACHIOR_LABS_SYNCHRONIZE(false);
 
-				struct ASTPtrByteOffsetExpr *ast_ptr_byteOffsetExpr = ParserMakePtrByteOffsetExpr(self,astExpr,ParserParseExpr(self,0));
+				innerExpr = C4MakeASTPtrByteOffsetExpr(self->bump,expr,ParserParseExpr(self,0));
 
 				ParserExpectSymbol(self,")","expected )");
 				ACHIOR_LABS_SYNCHRONIZE(false);
 
-				astExpr = ParserMakeExpression(self,AST_EXPRESSION_PTR_BYTE_OFFSET,ast_ptr_byteOffsetExpr);
+				expr = C4MakeASTExpression(self->bump,AST_EXPRESSION_PTR_BYTE_OFFSET,innerExpr);
 			}
-			else if(ACHIOR_LABS_STRCMP(ident.value.data,"advance") == 0)
+			else if(ACHIOR_LABS_STRCMP(TOKEN_GET_VALUE_DATA(*ident),"advance") == 0)
 			{
+				ACHIOR_LABS_PTR_INIT(struct ASTPtrAdvanceExpr,innerExpr);
+
 				ParserExpectSymbol(self,"(","expected (");
 				ACHIOR_LABS_SYNCHRONIZE(false);
 
-				struct ASTPtrAdvanceExpr *ast_ptr_advanceExpr = ParserMakePtrAdvanceExpr(self,astExpr,ParserParseExpr(self,0));
+				innerExpr = C4MakeASTPtrAdvanceExpr(self->bump,expr,ParserParseExpr(self,0));
 
 				ParserExpectSymbol(self,")","expected )");
 				ACHIOR_LABS_SYNCHRONIZE(false);
 
-				astExpr = ParserMakeExpression(self,AST_EXPRESSION_PTR_ADVANCE,ast_ptr_advanceExpr);
+				expr = C4MakeASTExpression(self->bump,AST_EXPRESSION_PTR_ADVANCE,innerExpr);
 			}
-			else if(ACHIOR_LABS_STRCMP(ident.value.data,"diff") == 0)
+			else if(ACHIOR_LABS_STRCMP(TOKEN_GET_VALUE_DATA(*ident),"diff") == 0)
 			{
+				ACHIOR_LABS_PTR_INIT(struct ASTPtrDiffExpr,innerExpr);
+
 				ParserExpectSymbol(self,"(","expected (");
 				ACHIOR_LABS_SYNCHRONIZE(false);
 
-				struct ASTPtrDiffExpr *ast_ptr_diffExpr = ParserMakePtrDiffExpr(self,astExpr,ParserParseExpr(self,0));
+				innerExpr = C4MakeASTPtrDiffExpr(self->bump,expr,ParserParseExpr(self,0));
 
 				ParserExpectSymbol(self,")","expected )");
 				ACHIOR_LABS_SYNCHRONIZE(false);
 
-				astExpr = ParserMakeExpression(self,AST_EXPRESSION_PTR_DIFF,ast_ptr_diffExpr);
+				expr = C4MakeASTExpression(self->bump,AST_EXPRESSION_PTR_DIFF,innerExpr);
 			}
-			else if(ACHIOR_LABS_STRCMP(ident.value.data,"as_ptr") == 0)
+			else if(ACHIOR_LABS_STRCMP(TOKEN_GET_VALUE_DATA(*ident),"as_ptr") == 0)
 			{
+				ACHIOR_LABS_PTR_INIT(struct ASTAsPtrExpr,innerExpr);
+
 				ParserExpectSymbol(self,"(","expected (");
 				ACHIOR_LABS_SYNCHRONIZE(false);
 
 				ParserExpectSymbol(self,")","expected )");
 				ACHIOR_LABS_SYNCHRONIZE(false);
 
-				struct ASTAsPtrExpr *astAsPtrExpr = ParserMakeAsPtrExpr(self,astExpr);
-				astExpr                                = ParserMakeExpression(self,AST_EXPRESSION_AS_PTR,astAsPtrExpr);
+				innerExpr = C4MakeASTAsPtrExpr(self->bump,expr);
+				expr      = C4MakeASTExpression(self->bump,AST_EXPRESSION_AS_PTR,innerExpr);
 
 			}
-			else if(ACHIOR_LABS_STRCMP(ident.value.data,"len") == 0)
+			else if(ACHIOR_LABS_STRCMP(TOKEN_GET_VALUE_DATA(*ident),"len") == 0)
 			{
+				ACHIOR_LABS_PTR_INIT(struct ASTLenExpr,innerExpr);
+
 				ParserExpectSymbol(self,"(","expected (");
 				ACHIOR_LABS_SYNCHRONIZE(false);
 
 				ParserExpectSymbol(self,")","expected )");
 				ACHIOR_LABS_SYNCHRONIZE(false);
 
-				struct ASTLenExpr *ast_lenExpr = ParserMakeLenExpr(self,astExpr);
-				astExpr                          = ParserMakeExpression(self,AST_EXPRESSION_LEN,ast_lenExpr);
+				innerExpr = C4MakeASTLenExpr(self->bump,expr);
+				expr      = C4MakeASTExpression(self->bump,AST_EXPRESSION_LEN,innerExpr);
 			}
 			else
 			{
-				ParserFatal(self,"unknown intrinsic ");
+				ParserFatal(self,ParserPeek(self,0),"unknown intrinsic  . ",NULL,NULL,NULL,NULL);
 				ACHIOR_LABS_SYNCHRONIZE(false);
 			}
 		}
@@ -2681,69 +3170,90 @@ struct ASTExpression *ParserParsePostfix(struct Parser *self)
 		}
 	}
 
-	return astExpr;
+	return expr;
 }
 
 struct ASTExpression *ParserParsePrimary(struct Parser *self)
 {
-	struct ASTExpression *astExpr = NULL;
+	ACHIOR_LABS_PTR_INIT(struct ASTExpression,expr);
 
-	if( ParserIsTokenType(self,TOKEN_LITERAL_INT,0))
+	if( ParserIsTokenKind(self,TOKEN_LITERAL_INT,0))
 	{
-		astExpr = ParserParseLiteralI32(self);
+		expr = ParserParseLiteralI32(self);
 	}
-	else if( ParserIsTokenType(self,TOKEN_LITERAL_CHARACTER,0))
+	else if( ParserIsTokenKind(self,TOKEN_LITERAL_CHARACTER,0))
 	{
-		astExpr = ParserParseLiteralCharacter(self);
+		expr = ParserParseLiteralCharacter(self);
 	}
-	else if( ParserIsTokenType(self,TOKEN_LITERAL_STRING,0))
+	else if( ParserIsTokenKind(self,TOKEN_LITERAL_STRING,0))
 	{
-		astExpr = ParserParseLiteralString(self);
+		expr = ParserParseLiteralString(self);
 	}
 	else if( ParserIsIdentifier(self))
 	{
-		astExpr = ParserParseVariableExpr(self);
+		expr = ParserParseVariableExpr(self);
+	}
+	else if( ParserIsTokenKind(self,TOKEN_KEYWORD_SELF,0))
+	{
+		expr = ParserParseSelfExpr(self);
 	}
 	else if(ParserIsToken(self,"(",0))
 	{
-		ParserExpectSymbol(self,"(",0);
-		astExpr = ParserParseExpr(self,0);
-		ParserExpectSymbol(self,")",0);puts("yyy");
+		//ParserExpectSymbol(self,"(","expected ( ");
+		//expr = ParserParseExpr(self,0);
+		expr = ParserParseParenExpr(self);
+		ParserExpectSymbol(self,")","expected ) ");
 	}
 	else if(ParserIsToken(self,"&",0))
 	{
-		astExpr = ParserParseAddressOfExpr(self);
-	}
-	else
-	{
-		extern const char *tokenTypeNames[];
-		struct Token token = ParserPeek(self,0);
+		expr = ParserParseAddressOfExpr(self);
 	}
 
-	return astExpr;
+	return expr;
 }
 
 
 
 struct ASTExpression *ParserParseAddressOfExpr(struct Parser *self)
 {
+	ACHIOR_LABS_PTR_INIT(struct ASTAddressOfExpr,expr);
+
 	ParserExpectSymbol(self,"&","expected &");
 	ACHIOR_LABS_SYNCHRONIZE(false);
 
-	struct ASTAddressOfExpr *astAddressOf = ParserMakeAddressOfExpr(self,ParserParsePrimary(self));
-	struct ASTExpression *astExpr            = ParserMakeExpression(self,AST_EXPRESSION_ADDRESS_OF,astAddressOf);
-
-	return astExpr;
+	expr = C4MakeASTAddressOfExpr(self->bump,ParserParsePrimary(self));
+	
+	return C4MakeASTExpression(self->bump,AST_EXPRESSION_ADDRESS_OF,expr);
 }
 
 
+struct ASTExpression *ParserParseSelfExpr(struct Parser *self)
+{
+	ACHIOR_LABS_PTR_INIT(struct ASTVariableExpr,expr);
+
+	expr = C4MakeASTVariableExpr(self->bump,ParserConsume(self));
+
+	return C4MakeASTExpression(self->bump,AST_EXPRESSION_VARIABLE,expr);
+}
+
+
+
+struct ASTExpression *ParserParseParenExpr(struct Parser *self)
+{
+	ACHIOR_LABS_PTR_INIT(struct ASTParenExpr,expr);
+
+	ParserExpectSymbol(self,"(","expected (");
+
+	expr = C4MakeASTParenExpr(self->bump,ParserParseExpr(self,0));
+
+	return C4MakeASTExpression(self->bump,AST_EXPRESSION_PAREN,expr);
+}
+
 struct ASTExpression *ParserParseVariableExpr(struct Parser *self)
 {
-	struct Token token                     = ParserConsume(self);
-	struct ASTVariableExpr *ast_variable = ParserMakeVariableExpr(self,token);
-	struct ASTExpression *astExpr        = ParserMakeExpression(self,AST_EXPRESSION_VARIABLE,ast_variable);
+	struct ASTVariableExpr *expr = C4MakeASTVariableExpr(self->bump,ParserConsume(self));
 
-	return astExpr;
+	return C4MakeASTExpression(self->bump,AST_EXPRESSION_VARIABLE,expr);
 }
 
 
@@ -2751,581 +3261,33 @@ struct ASTExpression *ParserParseVariableExpr(struct Parser *self)
 
 struct ASTExpression *ParserParseLiteralString(struct Parser *self)
 {
-	struct Token token                   = ParserConsume(self);
-	struct ASTLiteralExpr *ast_literal = ParserMakeLiteralExpr(self,AST_LITERAL_STRING,token);
-	struct ASTExpression *astExpr      = ParserMakeExpression(self,AST_EXPRESSION_LITERAL,ast_literal);
+	ACHIOR_LABS_PTR_INIT(struct ASTLiteralExpr,expr);
 
-	return astExpr;
+	expr = C4MakeASTLiteralExpr(self->bump,AST_LITERAL_STRING,ParserConsume(self));
+
+	return C4MakeASTExpression(self->bump,AST_EXPRESSION_LITERAL,expr);
 }
 
 
 
 struct ASTExpression *ParserParseLiteralCharacter(struct Parser *self)
 {
-	struct Token token                   = ParserConsume(self);
-	struct ASTLiteralExpr *ast_literal = ParserMakeLiteralExpr(self,AST_LITERAL_CHARACTER,token);
-	struct ASTExpression *astExpr      = ParserMakeExpression(self,AST_EXPRESSION_LITERAL,ast_literal);
+	ACHIOR_LABS_PTR_INIT(struct ASTLiteralExpr,expr);
 
-	return astExpr;
+	expr = C4MakeASTLiteralExpr(self->bump,AST_LITERAL_CHARACTER,ParserConsume(self));
+
+	return C4MakeASTExpression(self->bump,AST_EXPRESSION_LITERAL,expr);
 }
 
 
 
 struct ASTExpression *ParserParseLiteralI32(struct Parser *self)
 {
-	struct Token token                   = ParserConsume(self);
-	struct ASTLiteralExpr *ast_literal = ParserMakeLiteralExpr(self,AST_LITERAL_I32,token);
-	struct ASTExpression *astExpr      = ParserMakeExpression(self,AST_EXPRESSION_LITERAL,ast_literal);
+	ACHIOR_LABS_PTR_INIT(struct ASTLiteralExpr,expr);
 
-	return astExpr;
+	expr = C4MakeASTLiteralExpr(self->bump,AST_LITERAL_I32,ParserConsume(self));
+
+	return C4MakeASTExpression(self->bump,AST_EXPRESSION_LITERAL,expr);
 }
-
-
-
-
-//  Helpers
-
-
-
-struct ASTProgram *ParserMakeProgram(struct Parser *self,struct LinkedList decls)
-{
-    struct ASTProgram *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTProgram,1);
-
-    ASTProgramNew(node,decls);
-    return node;
-}
-
-
-
-struct ASTDeclaration *ParserMakeDeclaration(struct Parser *self,enum ASTDeclarationType type,void *decl)
-{
-    struct ASTDeclaration *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTDeclaration,1);
-    
-    ASTDeclarationNew(node,type,decl);
-    return node;
-}
-
-
-
-struct ASTStructDecl *ParserMakeStructDecl(struct Parser *self,struct Token ident,struct LinkedList properties)
-{
-    struct ASTStructDecl *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTStructDecl,1);
-
-    ASTStructDeclNew(node,ident,properties);
-    return node;
-}
-
-
-
-struct ASTStructProperty *ParserMakeStructProperty(struct Parser *self,struct ASTType *type,struct Token ident)
-{
-    struct ASTStructProperty *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTStructProperty,1);
-
-    ASTStructPropertyNew(node,type,ident);
-    return node;
-}
-
-
-
-
-
-struct ASTImplDecl *ParserMakeImplDecl(struct Parser *self,struct Token ident,struct LinkedList methods)
-{
-    struct ASTImplDecl *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTImplDecl,1);
-
-    ASTImplDeclNew(node,ident,methods);
-    return node;
-}
-
-
-struct ASTSumDecl *ParserMakeSumDecl(struct Parser *self,struct Token ident,struct LinkedList variants)
-{
-    struct ASTSumDecl *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTSumDecl,1);
-
-    ASTSumDeclNew(node,ident,variants);
-    return node;
-}
-
-
-struct ASTSumVariant *ParserMakeSumVariant(struct Parser *self,struct Token ident,enum ASTSumVariantKind kind,struct LinkedList fields)
-{
-	struct ASTSumVariant *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTSumVariant,1);
-
-    ASTSumVariantNew(node,ident,kind,fields);
-    return node;
-}
-
-
-struct ASTForeignDecl *ParserMakeForeignDecl(struct Parser *self,struct LinkedList functions)
-{
-    struct ASTForeignDecl *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTForeignDecl,1);
-
-    ASTForeignDeclNew(node,functions);
-    return node;
-}
-
-
-
-
-struct ASTFunctionDecl *ParserMakeFunctionDecl(struct Parser *self,struct ASTType *return_type,struct Token ident,struct LinkedList arguments,struct ASTBlockStmt *block,struct ASTFunctionAttributes *attributes)
-{
-    struct ASTFunctionDecl *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTFunctionDecl,1);
-
-    ASTFunctionDeclNew(node,return_type,ident,arguments,block,attributes);
-    return node;
-}
-
-
-
-struct ASTFunctionArgument *ParserMakeFunctionArgument(struct Parser *self,struct ASTType *type,struct Token ident)
-{
-    struct ASTFunctionArgument *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTFunctionArgument,1);
-
-    ASTFunctionArgumentNew(node,type,ident);
-    return node;
-}
-
-
-
-struct ASTFunctionAttributes *ParserMakeFunctionAttributes(struct Parser *self,bool is_pub,bool is_static,bool is_naked,bool is_foreign,struct String foreign_abi,bool has_link_name,struct String link_name)
-{
-    struct ASTFunctionAttributes *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTFunctionAttributes,1);
-
-    ASTFunctionAttributesNew(node,is_pub,is_static,is_naked,is_foreign,foreign_abi,has_link_name,link_name);
-
-    return node;
-}
-
-
-
-
-struct ASTType *ParserMakeType(struct Parser *self,enum ASTDataType data_type,void *type)
-{
-    struct ASTType *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTType,1);
-
-    ASTTypeNew(node,data_type,type);
-    return node;
-}
-
-
-
-
-struct ASTPointerType *ParserMakePointerType(struct Parser *self,struct ASTType *type)
-{
-    struct ASTPointerType *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTPointerType,1);
-
-    ASTPointerTypeNew(node,type);
-    return node;
-}
-
-
-
-
-struct ASTArrayType *ParserMakeArrayType(struct Parser *self,struct ASTType *type,struct ASTExpression *size)
-{
-    struct ASTArrayType *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTArrayType,1);
-
-    ASTArrayTypeNew(node,type,size);
-    return node;
-}
-
-
-
-
-struct ASTFunctionType *ParserMakeFunctionType(struct Parser *self,struct ASTType *return_type,struct LinkedList arguments)
-{
-    struct ASTFunctionType *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTFunctionType,1);
-
-    ASTFunctionTypeNew(node,return_type,arguments);
-    return node;
-}
-
-
-
-
-struct ASTStructType *ParserMakeStructType(struct Parser *self,struct Token ident,struct Layout layout)
-{
-    struct ASTStructType *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTStructType,1);
-
-    ASTStructTypeNew(node,ident,layout);
-    return node;
-}
-
-
-
-struct ASTAggregateType *ParserMakeAggregateType(struct Parser *self,struct Token ident)
-{
-    struct ASTAggregateType *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTAggregateType,1);
-
-    ASTAggregateTypeNew(node,ident);
-    return node;
-}
-
-
-
-
-
-
-struct ASTStatement *ParserMakeStatement(struct Parser *self,enum ASTStatementType type,void *stmt)
-{
-    struct ASTStatement *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTStatement,1);
-
-    ASTStatementNew(node,type,stmt);
-    return node;
-}
-
-
-
-
-struct ASTBlockStmt *ParserMakeBlockStmt(struct Parser *self,struct LinkedList stmts)
-{
-    struct ASTBlockStmt *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTBlockStmt,1);
-
-    ASTBlockStmtNew(node,stmts);
-    return node;
-}
-
-
-
-
-struct ASTReturnStmt *ParserMakeReturnStmt(struct Parser *self,struct ASTExpression *expr)
-{
-    struct ASTReturnStmt *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTReturnStmt,1);
-
-    ASTReturnStmtNew(node,expr);
-    return node;
-}
-
-
-
-
-struct ASTVariableDecl *ParserMakeVariableDecl(struct Parser *self,struct ASTType *type,struct Token ident,struct ASTVariableDeclInit *init)
-{
-    struct ASTVariableDecl *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTVariableDecl,1);
-
-    ASTVariableDeclNew(node,type,ident,init);
-    return node;
-}
-
-
-
-
-
-struct ASTVariableDeclInit *ParserMakeVariableDeclInit(struct Parser *self,enum ASTVariableDeclInitType init_type,void *init)
-{
-    struct ASTVariableDeclInit *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTVariableDeclInit,1);
-
-    ASTVariableDeclInitNew(node,init_type,init);
-    return node;
-}
-
-
-
-
-
-struct ASTVariableDeclSingleInit *ParserMakeVariableDeclSingleInit(struct Parser *self,struct ASTExpression *expr)
-{
-    struct ASTVariableDeclSingleInit *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTVariableDeclSingleInit,1);
-
-    ASTVariableDeclSingleInitNew(node,expr);
-    return node;
-}
-
-
-
-
-struct ASTVariableDeclArrayInit *ParserMakeVariableDeclArrayInit(struct Parser *self,struct LinkedList elements)
-{
-    struct ASTVariableDeclArrayInit *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTVariableDeclArrayInit,1);
-
-    ASTVariableDeclArrayInitNew(node,elements);
-    return node;
-}
-
-
-
-
-struct ASTBreakStmt *ParserMakeBreakStmt(struct Parser *self)
-{
-    struct ASTBreakStmt *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTBreakStmt,1);
-
-    ASTBreakStmtNew(node);
-    return node;
-}
-
-
-
-
-
-
-struct ASTContinueStmt *ParserMakeContinueStmt(struct Parser *self)
-{
-    struct ASTContinueStmt *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTContinueStmt,1);
-
-    ASTContinueStmtNew(node);
-    return node;
-}
-
-
-
-
-struct ASTLoopStmt *ParserMakeLoopStmt(struct Parser *self,struct ASTBlockStmt *block)
-{
-    struct ASTLoopStmt *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTLoopStmt,1);
-
-    ASTLoopStmtNew(node,block);
-    return node;
-}
-
-
-
-
-struct ASTWhileStmt *ParserMakeWhileStmt(struct Parser *self,struct ASTExpression *expr,struct ASTBlockStmt *block)
-{
-    struct ASTWhileStmt *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTWhileStmt,1);
-
-    ASTWhileStmtNew(node,expr,block);
-    return node;
-}
-
-
-
-
-struct ASTIfElif *ParserMakeIfElif(struct Parser *self,struct ASTExpression *expr,struct ASTBlockStmt *block)
-{
-    struct ASTIfElif *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTIfElif,1);
-
-    ASTIfElifNew(node,expr,block);
-    return node;
-}
-
-struct ASTIfElse *ParserMakeIfElse(struct Parser *self,struct ASTBlockStmt *block)
-{
-    struct ASTIfElse *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTIfElse,1);
-
-    ASTIfElseNew(node,block);
-    return node;
-}
-
-struct ASTIfStmt *ParserMakeIfStmt(struct Parser *self,struct ASTExpression *expr,struct ASTBlockStmt *block,struct LinkedList elifs,struct ASTIfElse *else_block)
-{
-    struct ASTIfStmt *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTIfStmt,1);
-
-    ASTIfStmtNew(node,expr,block,elifs,else_block);
-    return node;
-}
-
-
-
-
-struct ASTExpression *ParserMakeExpression(struct Parser *self,enum ASTExpressionType type,void *expr)
-{
-    struct ASTExpression *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTExpression,1);
-
-    ASTExpressionNew(node,type,expr);
-    return node;
-}
-
-
-
-struct ASTLiteralExpr *ParserMakeLiteralExpr(struct Parser *self,enum ASTLiteralType type,struct Token literal)
-{
-    struct ASTLiteralExpr *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTLiteralExpr,1);
-
-    ASTLiteralExprNew(node,type,literal);
-    return node;
-}
-
-
-
-
-struct ASTVariableExpr *ParserMakeVariableExpr(struct Parser *self,struct Token ident)
-{
-    struct ASTVariableExpr *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTVariableExpr,1);
-
-    ASTVariableExprNew(node,ident);
-    return node;
-}
-
-
-
-struct ASTUnaryExpr *ParserMakeUnaryExpr(struct Parser *self,enum ASTUnaryOperator op,struct ASTExpression *rhs)
-{
-    struct ASTUnaryExpr *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTUnaryExpr,1);
-
-    ASTUnaryExprNew(node,op,rhs);
-    return node;
-}
-
-
-
-
-struct ASTBinaryExpr *ParserMakeBinaryExpr(struct Parser *self,struct ASTExpression *lhs,enum ASTBinaryOperator op,struct ASTExpression *rhs)
-{
-    struct ASTBinaryExpr *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTBinaryExpr,1);
-
-    ASTBinaryExprNew(node,lhs,op,rhs);
-    return node;
-}
-
-
-
-
-struct ASTAssignmentExpr *ParserMakeAssignmentExpr(struct Parser *self,struct ASTExpression *lhs,enum ASTAssignmentOperator op,struct ASTExpression *rhs)
-{
-    struct ASTAssignmentExpr *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTAssignmentExpr,1);
-
-    ASTAssignmentExprNew(node,lhs,op,rhs);
-    return node;
-}
-
-
-
-
-struct ASTCastExpr *ParserMakeCastExpr(struct Parser *self,struct ASTExpression *lhs,enum ASTCastOperator op,struct ASTType *data_type)
-{
-    struct ASTCastExpr *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTCastExpr,1);
-
-    ASTCastExprNew(node,lhs,op,data_type);
-    return node;
-}
-
-
-
-
-
-struct ASTFunctionCallExpr *ParserMakeFunctionCallExpr(struct Parser *self,struct ASTExpression *base,struct LinkedList arguments)
-{
-    struct ASTFunctionCallExpr *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTFunctionCallExpr,1);
-
-    ASTFunctionCallExprNew(node,base,arguments);
-    return node;
-}
-
-
-
-struct ASTAddressOfExpr *ParserMakeAddressOfExpr(struct Parser *self,struct ASTExpression *rhs)
-{
-    struct ASTAddressOfExpr *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTAddressOfExpr,1);
-
-    ASTAddressOfExprNew(node,rhs);
-    return node;
-}
-
-
-
-
-struct ASTPtrReadExpr *ParserMakePtrReadExpr(struct Parser *self,struct ASTExpression *lhs)
-{
-    struct ASTPtrReadExpr *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTPtrReadExpr,1);
-
-    ASTPtrReadExprNew(node,lhs);
-    return node;
-}
-
-
-
-
-struct ASTPtrWriteExpr *ParserMakePtrWriteExpr(struct Parser *self,struct ASTExpression *lhs,struct ASTExpression *rhs)
-{
-    struct ASTPtrWriteExpr *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTPtrWriteExpr,1);
-
-    ASTPtrWriteExprNew(node,lhs,rhs);
-    return node;
-}
-
-
-
-
-struct ASTPtrOffsetExpr *ParserMakePtrOffsetExpr(struct Parser *self,struct ASTExpression *lhs,struct ASTExpression *rhs)
-{
-    struct ASTPtrOffsetExpr *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTPtrOffsetExpr,1);
-
-    ASTPtrOffsetExprNew(node,lhs,rhs);
-    return node;
-}
-
-
-
-struct ASTPtrByteOffsetExpr *ParserMakePtrByteOffsetExpr(struct Parser *self,struct ASTExpression *lhs,struct ASTExpression *rhs)
-{
-    struct ASTPtrByteOffsetExpr *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTPtrByteOffsetExpr,1);
-
-    ASTPtrByteOffsetExprNew(node,lhs,rhs);
-    return node;
-}
-
-
-
-struct ASTPtrAdvanceExpr *ParserMakePtrAdvanceExpr(struct Parser *self,struct ASTExpression *lhs,struct ASTExpression *rhs)
-{
-    struct ASTPtrAdvanceExpr *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTPtrAdvanceExpr,1);
-
-    ASTPtrAdvanceExprNew(node,lhs,rhs);
-    return node;
-}
-
-
-
-struct ASTPtrDiffExpr *ParserMakePtrDiffExpr(struct Parser *self,struct ASTExpression *lhs,struct ASTExpression *rhs)
-{
-    struct ASTPtrDiffExpr *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTPtrDiffExpr,1);
-
-    ASTPtrDiffExprNew(node,lhs,rhs);
-    return node;
-}
-
-
-
-
-struct ASTSubscriptExpr *ParserMakeSubscriptExpr(struct Parser *self,struct ASTExpression *lhs,struct ASTExpression *index)
-{
-    struct ASTSubscriptExpr *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTSubscriptExpr,1);
-
-    ASTSubscriptExprNew(node,lhs,index);
-    return node;
-}
-
-
-
-
-struct ASTAsPtrExpr *ParserMakeAsPtrExpr(struct Parser *self,struct ASTExpression *lhs)
-{
-    struct ASTAsPtrExpr *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTAsPtrExpr,1);
-
-    ASTAsPtrExprNew(node,lhs);
-    return node;
-}
-
-struct ASTLenExpr *ParserMakeLenExpr(struct Parser *self,struct ASTExpression *lhs)
-{
-    struct ASTLenExpr *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTLenExpr,1);
-
-    ASTLenExprNew(node,lhs);
-    return node;
-}
-
-
-
-
-struct ASTStructAccessExpr *ParserMakeStructAccessExpr(struct Parser *self,struct ASTExpression *lhs,struct Token member)
-{
-    struct ASTStructAccessExpr *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTStructAccessExpr,1);
-
-    ASTStructAccessExprNew(node,lhs,member);
-    return node;
-}
-
-
-
-
-struct ASTStructPointerAccessExpr *ParserMakeStructPointerAccessExpr(struct Parser *self,struct ASTExpression *lhs,struct Token member)
-{
-    struct ASTStructPointerAccessExpr *node = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTStructPointerAccessExpr,   1);
-
-    ASTStructPointerAccessExprNew(node,lhs,member);
-    return node;
-}
-
 
 
