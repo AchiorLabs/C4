@@ -1,6 +1,10 @@
 *test*
 Target
 Objects
-C4VscodeExtension
-.vscode
 package-lock.json
+Test
+.*
+# iwashere personal notes
+.iwashere/
+bug
+risc-v

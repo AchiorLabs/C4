@@ -17,32 +17,185 @@ bool IdentifierEntryNew(struct IdentifierEntry *self,bool hasLinkage,bool isCurr
     return true;
 }
 
+struct String StringReplacePathSeparators(struct String source)
+{
+    ACHIOR_LABS_VAR_INIT(u64,sourceLength);
+    ACHIOR_LABS_STRUCT_INIT(struct String,destination);
+    
+    sourceLength = source.size;
+    
+    StringNew(&destination,source.capacity,source.bump);
 
-bool IdentifierResolutionNew(struct IdentifierResolution *self,struct ASTProgram *program,char *fileName,u64 globalCounter,struct BumpAllocator *bump)
+	for (u64 i = 0; i < sourceLength; i++)
+	{
+		// Replace "::" with "_" 
+		if (i + 1 < sourceLength && source.data[i] == ':' && source.data[i + 1] == ':')
+		{
+			StringPushBackChar(&destination,'_');
+
+			i++; // Skip second ':' 
+			continue;
+		}
+
+		StringPushBackChar(&destination,source.data[i]);
+	}
+
+	return destination;
+}
+
+
+
+void IdentifierResolutionFatal(struct IdentifierResolution *self,struct Token *token,char *message,char *label,char *help,char *fix,char *note)
+{
+	if( ACHIOR_LABS_NULL(self))
+	{
+		return;
+	}
+
+	ACHIOR_LABS_STRUCT_INIT(struct Span,span);
+	ACHIOR_LABS_PTR_INIT(struct Diagnostic,diagnostic);
+
+	span             = token->span;
+	diagnostic       = DiagnosticEngineReport(self->engine,DIAGNOSTIC_ERROR,message,self->moduleName,self->moduleSource,self->sourceLength,1);
+	
+	
+	if(ACHIOR_LABS_NOT_NULL(label))
+	{
+		DiagnosticAddLabel(diagnostic,span,label,true,self->bump);
+	}
+	else
+	{
+		DiagnosticAddLabel(diagnostic,span,"",true,self->bump);
+	}
+
+	if(ACHIOR_LABS_NOT_NULL(help))
+	{
+		DiagnosticAddHelp(diagnostic,help,self->bump);
+	}
+
+	if(ACHIOR_LABS_NOT_NULL(fix))
+	{
+		DiagnosticAddFix(diagnostic,span,fix,self->bump);
+	}
+	
+	if(ACHIOR_LABS_NOT_NULL(note))
+	{
+		DiagnosticAddNote(diagnostic,note,self->bump);
+	}
+}
+
+
+bool IdentifierResolutionNew(struct IdentifierResolution *self,char *moduleName,char *moduleSource,struct ASTProgram *program,u64 globalCounter,struct DiagnosticEngine *engine,struct BumpAllocator *bump)
 {
     if(ACHIOR_LABS_NULL(self))
     {
         return false;
     }
 
+    ACHIOR_LABS_STRUCT_INIT(struct HashMap,identMap);
+
     self->program       = program;
     self->globalCounter = globalCounter;
+    self->engine        = engine;
     self->bump          = bump;
-
+    self->moduleName    = moduleName;
+    self->moduleSource  = moduleSource;
+    self->sourceLength  = ACHIOR_LABS_STRLEN(moduleSource);
     
 
-    struct HashMap identMap;
     HashMapNew(&identMap,10,self->bump);
+    HashMapNew(&self->program->identMap,10,self->bump);
     HashMapNew(&self->structMap,10,self->bump);
     HashMapNew(&self->functionAttributes,10,self->bump);
 
     
     IdentifierResolutionProgram(self,program,&identMap);
 
-    puts("Identifier Resolution done");
+    //puts("Identifier Resolution done");
 
     return true;
 }
+
+
+
+
+struct HashMap IdentifierResolutionCopyIdentMap(struct IdentifierResolution *self,struct HashMap *identMap)
+{
+    ACHIOR_LABS_STRUCT_INIT(struct HashMap,newIdentMap);
+
+    if( ACHIOR_LABS_NULL(self) || ACHIOR_LABS_NULL(identMap))
+    {
+        newIdentMap;
+    }
+
+    HashMapNew(&newIdentMap,identMap->capacity,self->bump);
+
+    for(u64 i = 0; i < identMap->capacity; i++)
+    {
+        ACHIOR_LABS_VAR_INIT(u64,j);
+
+        ACHIOR_LABS_PTR_INIT(struct HashNode,previousNode);
+        ACHIOR_LABS_PTR_INIT(struct HashNode,newNode);
+        ACHIOR_LABS_PTR_INIT(struct HashNode,node);
+        ACHIOR_LABS_PTR_INIT(struct IdentifierEntry,entry);
+        ACHIOR_LABS_PTR_INIT(struct IdentifierEntry,newEntry);
+
+        ACHIOR_LABS_STRUCT_INIT(struct String,newIdent);
+
+        for (node = identMap->buckets[i]; ACHIOR_LABS_NOT_NULL(node); node = node->next)
+        {
+            newNode = (struct HashNode *)ACHIOR_LABS_ARENA_ALLOC(self->bump,struct HashNode,1);
+
+            if(ACHIOR_LABS_NULL(newNode))
+            {
+                continue;
+            }
+
+            newNode->hash = node->hash;
+            newNode->key  = ACHIOR_LABS_ARENA_ALLOC(self->bump,char,node->keyLength);
+
+            if(ACHIOR_LABS_NULL(newNode->key))
+            {
+                continue;
+            }
+
+            newNode->keyLength = node->keyLength;
+            ACHIOR_LABS_MEMCPY(newNode->key,node->key,node->keyLength);
+
+            entry    = (struct IdentifierEntry *)node->value;
+            newEntry = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct IdentifierEntry,1);
+            
+            
+            StringNew(&newIdent,entry->ident.capacity,self->bump);
+            StringPushBack(&newIdent,entry->ident.data);
+
+            IdentifierEntryNew(newEntry,entry->hasLinkage,false,entry->aggregateKind,newIdent);
+            
+
+            newNode->value = newEntry;
+            newNode->next  = NULL;
+
+            if(ACHIOR_LABS_NOT_NULL(previousNode))
+            {
+                previousNode->next = newNode;
+            }
+
+            previousNode   = newNode; 
+
+            if(ACHIOR_LABS_ZERO(j))
+            {
+                newIdentMap.buckets[i] = newNode;
+            }
+
+            newIdentMap.size++;
+            j++;
+        }
+    }
+    
+    return newIdentMap;
+}
+
+
 
 
 void IdentifierResolutionProgram(struct IdentifierResolution *self,struct ASTProgram *program,struct HashMap *identMap)
@@ -53,7 +206,11 @@ void IdentifierResolutionProgram(struct IdentifierResolution *self,struct ASTPro
     }
  
     
-    for(u64 i = 0; i < program->decls.len; i++)
+    ACHIOR_LABS_VAR_INIT(u64,declarationLength);
+
+    declarationLength = LinkedListLength(&program->decls);
+
+    for(u64 i = 0; i < declarationLength; i++)
     {
 		IdentifierResolutionDeclaration(self,LinkedListAt(&program->decls,i),identMap);
 	}
@@ -67,32 +224,32 @@ void IdentifierResolutionDeclaration(struct IdentifierResolution *self,struct AS
         return;
     }
 
-	switch(decl->type)
+	switch(ASTDECLARATION_GET_KIND(*decl))
 	{
-		case AST_DECLARATION_STRUCT:
+		case AST_DECLARATION_ENUM:
 		{
-			IdentifierResolutionStructDecl(self,decl->decl,identMap);
+			IdentifierResolutionEnumDecl(self,ASTDECLARATION_GET_DECL(*decl),identMap);
 			break;
 		}
-		case AST_DECLARATION_UNION:
+		case AST_DECLARATION_STRUCT:
 		{
-			IdentifierResolutionUnionDecl(self,decl->decl,identMap);
+			IdentifierResolutionStructDecl(self,ASTDECLARATION_GET_DECL(*decl),identMap);
 			break;
 		}
 		case AST_DECLARATION_IMPL:
 		{
-			IdentifierResolutionImplDecl(self,decl->decl,identMap);
+			IdentifierResolutionImplDecl(self,ASTDECLARATION_GET_DECL(*decl),identMap);
 			break;
 		}
 		case AST_DECLARATION_SUM:
 		{
             break;
-			//IdentifierResolutionSumDecl(self,decl->decl,identMap);
+			//IdentifierResolutionSumDecl(self,ASTDECLARATION_GET_DECL(*decl),identMap);
 			break;
 		}
 		case AST_DECLARATION_FUNCTION:
 		{
-			IdentifierResolutionFunctionDecl(self,decl->decl,identMap);
+			IdentifierResolutionFunctionDecl(self,ASTDECLARATION_GET_DECL(*decl),(struct String){0},identMap);
 			break;
 		}
 		default:
@@ -105,6 +262,74 @@ void IdentifierResolutionDeclaration(struct IdentifierResolution *self,struct AS
 
 
 
+void IdentifierResolutionEnumDecl(struct IdentifierResolution *self,struct ASTEnumDecl *decl,struct HashMap *identMap)
+{
+    if( ACHIOR_LABS_NULL(decl))
+    {
+        return;
+    }
+
+
+    ACHIOR_LABS_PTR_INIT(struct IdentifierEntry,entry);
+    ACHIOR_LABS_PTR_INIT(char,structIdent);
+    ACHIOR_LABS_PTR_INIT(struct ASTEnumConstant,constant);
+    ACHIOR_LABS_PTR_INIT(struct Token,token);
+    ACHIOR_LABS_PTR_INIT(char,ident);
+
+    ACHIOR_LABS_VAR_INIT(u64,structIdentLength);
+
+    ACHIOR_LABS_STRUCT_INIT(struct String,moduleIdent);
+
+    
+    StringNew(&moduleIdent,20,self->bump);
+
+    StringPushBack(&moduleIdent,self->moduleName);
+    StringPushBack(&moduleIdent,TOKEN_GET_VALUE_DATA(*(decl->ident)));
+
+    moduleIdent       = StringReplacePathSeparators(moduleIdent);
+    structIdent       = TOKEN_GET_VALUE_DATA(*(decl->ident));
+    structIdentLength = ACHIOR_LABS_STRLEN(structIdent);
+    entry             = HashMapGet(&self->structMap,structIdent,structIdentLength);
+
+    TOKEN_SET_VALUE(*(decl->ident),moduleIdent);
+
+    if(ACHIOR_LABS_NOT_NULL(entry))
+    {
+        if(entry->aggregateKind == IDENTIFIER_AGGREGATE_ENUM)
+        {
+            IdentifierResolutionFatal(self,decl->ident,"enum redeclared ",NULL,"assign a different name to your enum"," newEnumName",NULL);
+        }
+        else
+        {
+            IdentifierResolutionFatal(self,decl->ident,"enum shares same name with another struct ",NULL,"assign a different name to your enum"," newEnumName",NULL);
+        }
+        
+        return;
+    }
+
+    entry = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct IdentifierEntry,1);
+    IdentifierEntryNew(entry,true,true,IDENTIFIER_AGGREGATE_ENUM,TOKEN_GET_VALUE(*(decl->ident)));
+    
+    HashMapAdd(&self->structMap,structIdent,structIdentLength,entry);
+    HashMapAdd(&self->program->identMap,structIdent,structIdentLength,entry);
+
+    structIdent = TOKEN_GET_VALUE_DATA(*(decl->ident));
+
+    for(u64 i = 0; i <decl->constants.len; i++)
+    {
+        constant = LinkedListAt(&decl->constants,i);
+        token    = constant->constant;
+        ident    = token->value.data;
+
+
+        StringNew(&token->value,token->value.capacity,self->bump);
+        StringPushBack(&token->value,structIdent);
+        StringPushBack(&token->value,ident);
+    }
+
+}
+
+
 
 void IdentifierResolutionStructDecl(struct IdentifierResolution *self,struct ASTStructDecl *decl,struct HashMap *identMap)
 {
@@ -113,50 +338,57 @@ void IdentifierResolutionStructDecl(struct IdentifierResolution *self,struct AST
         return;
     }
 
+    ACHIOR_LABS_PTR_INIT(struct IdentifierEntry,entry);
+    ACHIOR_LABS_PTR_INIT(char,structIdent);
+    ACHIOR_LABS_PTR_INIT(struct ASTStructProperty,property);
 
-    char *structIdent             = decl->ident.value.data;
-    u64 structIdentLength         = ACHIOR_LABS_STRLEN(structIdent);
-    struct IdentifierEntry *entry = HashMapGet(&self->structMap,structIdent,structIdentLength);
+    ACHIOR_LABS_VAR_INIT(u64,structIdentLength);
 
-    if(ACHIOR_LABS_NOT_NULL(entry))
-    {
-        puts("struct redeclared : [error]");
-        return;
-    }
+    ACHIOR_LABS_STRUCT_INIT(struct String,moduleIdent);
 
-    entry = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct IdentifierEntry,1);
-    IdentifierEntryNew(entry,true,true,IDENTIFIER_AGGREGATE_STRUCT,decl->ident.value);
     
-    HashMapGet(&self->structMap,structIdent,structIdentLength);
-}
+    StringNew(&moduleIdent,20,self->bump);
 
+    StringPushBack(&moduleIdent,self->moduleName);
+    StringPushBack(&moduleIdent,TOKEN_GET_VALUE_DATA(*(decl->ident)));
 
+    moduleIdent       = StringReplacePathSeparators(moduleIdent);
+    structIdent       = TOKEN_GET_VALUE_DATA(*(decl->ident));
+    structIdentLength = ACHIOR_LABS_STRLEN(structIdent);
+    entry             = HashMapGet(&self->structMap,structIdent,structIdentLength);
 
-
-
-void IdentifierResolutionUnionDecl(struct IdentifierResolution *self,struct ASTUnionDecl *decl,struct HashMap *identMap)
-{
-    if( ACHIOR_LABS_NULL(decl))
-    {
-        return;
-    }
-
-
-    char *structIdent             = decl->ident.value.data;
-    u64 structIdentLength         = ACHIOR_LABS_STRLEN(structIdent);
-    struct IdentifierEntry *entry = HashMapGet(&self->structMap,structIdent,structIdentLength);
+    TOKEN_SET_VALUE(*(decl->ident),moduleIdent);
 
     if(ACHIOR_LABS_NOT_NULL(entry))
     {
-        puts("union redeclared : [error]");
+        if(entry->aggregateKind == IDENTIFIER_AGGREGATE_STRUCT)
+        {
+            IdentifierResolutionFatal(self,decl->ident,"struct redeclared ",NULL,"assign a different name to your struct"," newStructName",NULL);
+        }
+        else
+        {
+            IdentifierResolutionFatal(self,decl->ident,"struct shares same name with another enum ",NULL,"assign a different name to your struct"," newStructName",NULL);
+        }
+        
         return;
     }
 
     entry = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct IdentifierEntry,1);
-    IdentifierEntryNew(entry,true,true,IDENTIFIER_AGGREGATE_UNION,decl->ident.value);
+    IdentifierEntryNew(entry,true,true,IDENTIFIER_AGGREGATE_STRUCT,TOKEN_GET_VALUE(*(decl->ident)));
     
     HashMapAdd(&self->structMap,structIdent,structIdentLength,entry);
+    HashMapAdd(&self->program->identMap,structIdent,structIdentLength,entry);
+
+
+    for(u64 i = 0; i < decl->properties.len; i++)
+    {
+        property = LinkedListAt(&decl->properties,i);
+
+        IdentifierResolutionType(self,property->type);
+    }
 }
+
+
 
 
 /*
@@ -170,7 +402,7 @@ void IdentifierResolutionSumDecl(struct IdentifierResolution *self,struct ASTSum
     }
 
 
-    IdentifierResolutionSumEnum(self,decl->ident.value.data,decl->variants);
+    IdentifierResolutionSumEnum(self,TOKEN_GET_VALUE_DATA(*(decl->ident)),decl->variants);
     
 
     
@@ -267,85 +499,212 @@ void IdentifierResolutionSumVariants(struct IdentifierResolution *self,struct Li
 
 
 void IdentifierResolutionImplDecl(struct IdentifierResolution *self,struct ASTImplDecl *decl,struct HashMap *identMap)
-{puts("hmm$");
-    if( ACHIOR_LABS_NULL(decl))
-    {
-        return;
-    }
-
-
-    for(u64 i = 0; i < decl->methods.len; i++)
-    {
-        struct ASTFunctionDecl *method = LinkedListAt(&decl->methods,i);
-        IdentifierResolutionFunctionDecl(self,method,identMap);
-    }
-}
-
-
-void IdentifierResolutionFunctionDecl(struct IdentifierResolution *self,struct ASTFunctionDecl *decl,struct HashMap *identMap)
 {
     if( ACHIOR_LABS_NULL(decl))
     {
         return;
     }
 
-    if(ACHIOR_LABS_EQUAL(decl->returnType->dataType,AST_DATA_TYPE_AGGREGATE))
+    ACHIOR_LABS_PTR_INIT(struct ASTFunctionDecl,method);
+
+    ACHIOR_LABS_VAR_INIT(u64,methodLength);
+
+    ACHIOR_LABS_STRUCT_INIT(struct String,moduleIdent);
+    ACHIOR_LABS_STRUCT_INIT(struct HashMap,newIdentMap);
+
+
+    StringNew(&moduleIdent,20,self->bump);
+
+    StringPushBack(&moduleIdent,self->moduleName);
+    StringPushBack(&moduleIdent,TOKEN_GET_VALUE_DATA(*(decl->ident)));
+
+    moduleIdent = StringReplacePathSeparators(moduleIdent);
+
+
+
+    TOKEN_GET_VALUE(*(decl->ident)) = moduleIdent;
+
+    
+    newIdentMap  = IdentifierResolutionCopyIdentMap(self,identMap);
+    methodLength = LinkedListLength(&decl->methods);
+
+    for(u64 i = 0; i < methodLength; i++)
     {
-        struct ASTAggregateType *type = (struct ASTAggregateType *)decl->returnType->type;
-        char *ident                   = type->ident.value.data;
-        u64 identLength               = ACHIOR_LABS_STRLEN(ident);
-        struct IdentifierEntry *entry = HashMapGet(&self->structMap,ident,identLength);
+        method = LinkedListAt(&decl->methods,i);
+        
+        IdentifierResolutionFunctionDecl(self,method,TOKEN_GET_VALUE(*(decl->ident)),&newIdentMap);
+    }
+}
 
-        if(ACHIOR_LABS_NULL(entry))
-        {
-            puts("unknown aggregate type encountered");
-        }
 
-        if(ACHIOR_LABS_EQUAL(entry->aggregateKind,IDENTIFIER_AGGREGATE_STRUCT))
+
+void IdentifierResolutionType(struct IdentifierResolution *self,struct ASTType *type)
+{
+    if( ACHIOR_LABS_NULL(type))
+    {
+        return;
+    }
+
+    
+
+    switch(type->dataType)
+    {
+        case AST_DATA_TYPE_AGGREGATE:
         {
-            decl->returnType->dataType = AST_DATA_TYPE_STRUCT;
+            struct ASTAggregateType *aggregateType = (struct ASTAggregateType *)type->type;
+            struct Token *token                    = LinkedListAt(&aggregateType->path,0);
+            char *ident                            = token->value.data;
+            u64 identLength                        = ACHIOR_LABS_STRLEN(ident);
+            struct IdentifierEntry *entry          = HashMapGet(&self->structMap,ident,identLength);
+
+            if(ACHIOR_LABS_NULL(entry))
+            {
+                return;
+            }
+
+            token->value = entry->ident;
+
+            struct ASTStructType *structType = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTStructType,1);
+            ASTStructTypeNew(structType,token,(struct Layout){0});
+            type->type = structType;
+
+
+            if(ACHIOR_LABS_EQUAL(entry->aggregateKind,IDENTIFIER_AGGREGATE_STRUCT))
+            {
+                type->dataType = AST_DATA_TYPE_STRUCT;
+            }
+            else if(ACHIOR_LABS_EQUAL(entry->aggregateKind,IDENTIFIER_AGGREGATE_ENUM))
+            {
+                type->dataType = AST_DATA_TYPE_ENUM;
+            }
+            else if(ACHIOR_LABS_EQUAL(entry->aggregateKind,IDENTIFIER_AGGREGATE_UNION))
+            {
+                type->dataType = AST_DATA_TYPE_UNION;
+            }
+            break;
         }
-        else if(ACHIOR_LABS_EQUAL(entry->aggregateKind,IDENTIFIER_AGGREGATE_STRUCT))
+        case AST_DATA_TYPE_STRUCT:
         {
-            decl->returnType->dataType = AST_DATA_TYPE_UNION;
+            struct ASTStructType *structType = (struct ASTStructType *)type->type;
+            char *ident                      = TOKEN_GET_VALUE_DATA(*(structType->ident));
+            u64 identLength                  = ACHIOR_LABS_STRLEN(ident);
+            struct IdentifierEntry *entry    = HashMapGet(&self->structMap,ident,identLength);
+
+
+            if(ACHIOR_LABS_NULL(entry))
+            {
+                return;
+            }
+
+
+            TOKEN_SET_VALUE(*(structType->ident),entry->ident);
+            
+            break;
         }
+        case AST_DATA_TYPE_POINTER:
+        {
+            struct ASTPointerType *pointerType = (struct ASTPointerType *)type->type;
+            IdentifierResolutionType(self,pointerType->type);
+            break;
+        }
+    }
+}
+
+
+void IdentifierResolutionFunctionDecl(struct IdentifierResolution *self,struct ASTFunctionDecl *decl,struct String structIdent,struct HashMap *identMap)
+{
+    if( ACHIOR_LABS_NULL(decl))
+    {
+        return;
     }
 
 
-    char *ident                   = decl->ident.value.data;
-    u64 identLength               = ACHIOR_LABS_STRLEN(ident);
-    struct IdentifierEntry *entry = HashMapGet(&self->structMap,ident,identLength);
+    if(ACHIOR_LABS_NOT_NULL(decl->attributes) && ACHIOR_LABS_TRUE(decl->attributes->isForeign))
+    {
+        //return;
+    }
+
+
+    ACHIOR_LABS_PTR_INIT(struct IdentifierEntry,entry);
+    ACHIOR_LABS_PTR_INIT(char,ident);
+    ACHIOR_LABS_PTR_INIT(struct ASTStructProperty,property);
+
+    ACHIOR_LABS_VAR_INIT(u64,identLength);
+    ACHIOR_LABS_VAR_INIT(u64,argumentLength);
+
+    ACHIOR_LABS_STRUCT_INIT(struct String,moduleIdent);
+    ACHIOR_LABS_STRUCT_INIT(struct String,newIdent);
+    ACHIOR_LABS_STRUCT_INIT(struct HashMap,newIdentMap);
+
+
+    IdentifierResolutionType(self,decl->returnType);
+
+
+    StringNew(&moduleIdent,20,self->bump);
+
+    StringPushBack(&moduleIdent,self->moduleName);
+
+    if(ACHIOR_LABS_NOT_ZERO(structIdent.size))
+    {
+        moduleIdent.size = 0;
+        StringPushBack(&moduleIdent,structIdent.data);
+    }
+
+    StringPushBack(&moduleIdent,TOKEN_GET_VALUE_DATA(*(decl->ident)));
+    
+
+    moduleIdent = StringReplacePathSeparators(moduleIdent);
+
+
+
+    ident       = TOKEN_GET_VALUE_DATA(*(decl->ident));
+    identLength = ACHIOR_LABS_STRLEN(ident);
+    entry       = HashMapGet(identMap,ident,identLength);
+    newIdent    = TOKEN_GET_VALUE(*(decl->ident));
+
+    if(ACHIOR_LABS_STRNCMP(TOKEN_GET_VALUE_DATA(*(decl->ident)),"main",4) && ACHIOR_LABS_FALSE(decl->attributes->isForeign))
+    {
+        TOKEN_SET_VALUE(*(decl->ident),moduleIdent);
+
+        newIdent = moduleIdent;
+    }
+
 
     if(ACHIOR_LABS_NOT_NULL(entry))
     {
         if(ACHIOR_LABS_TRUE(entry->isCurrent))
         {
-            puts("union redeclared : [error]");
+            IdentifierResolutionFatal(self,decl->ident,"function redeclared ",NULL,"assign a different name to your function"," newFunctionName",NULL);
             return;
         }
         
     }
 
-    HashMapAdd(&self->functionAttributes,ident,identLength,decl->attributes);
+    HashMapAdd(&self->functionAttributes,newIdent.data,newIdent.size,decl->attributes);
 
     entry = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct IdentifierEntry,1);
-    IdentifierEntryNew(entry,true,true,IDENTIFIER_AGGREGATE_NONE,decl->ident.value);
+
+    IdentifierEntryNew(entry,true,true,IDENTIFIER_AGGREGATE_NONE,TOKEN_GET_VALUE(*(decl->ident)));
     
-    HashMapAdd(&self->structMap,ident,identLength,entry);
+    HashMapAdd(identMap,ident,identLength,entry);
+    HashMapAdd(&self->program->identMap,ident,identLength,entry);
 
-    struct HashMap *newIdentMap = identMap;
+    newIdentMap    = IdentifierResolutionCopyIdentMap(self,identMap);
+    argumentLength = LinkedListLength(&decl->arguments);
 
-    for(u64 i = 0; i < decl->arguments.len; i++)
+    for(u64 i = 0; i < argumentLength; i++)
     {
-        IdentifierResolutionFunctionArgument(self,LinkedListAt(&decl->arguments,i),newIdentMap);
+        IdentifierResolutionFunctionArgument(self,LinkedListAt(&decl->arguments,i),&newIdentMap);
     }
 
     
     if(ACHIOR_LABS_NOT_NULL(decl->block))
     {
-        IdentifierResolutionBlockStmt(self,decl->block,newIdentMap);
+        IdentifierResolutionBlockStmt(self,decl->block,&newIdentMap);
     }
 }
+
+
 
 
 
@@ -356,61 +715,55 @@ void IdentifierResolutionFunctionArgument(struct IdentifierResolution *self,stru
         return;
     }
 
-    if(ACHIOR_LABS_EQUAL(argument->type->dataType,AST_DATA_TYPE_AGGREGATE))
-    {
-        struct ASTAggregateType *type = (struct ASTAggregateType *)argument->type->type;
-        char *ident                   = type->ident.value.data;
-        u64 identLength               = ACHIOR_LABS_STRLEN(ident);
-        struct IdentifierEntry *entry = HashMapGet(&self->structMap,ident,identLength);
+    ACHIOR_LABS_PTR_INIT(struct IdentifierEntry,entry);
+    ACHIOR_LABS_PTR_INIT(char,ident);
 
-        if(ACHIOR_LABS_NULL(entry))
-        {
-            puts("unknown aggregate type encountered");
-        }
+    ACHIOR_LABS_VAR_INIT(u64,identLength);
 
-        if(ACHIOR_LABS_EQUAL(entry->aggregateKind,IDENTIFIER_AGGREGATE_STRUCT))
-        {
-            argument->type->dataType = AST_DATA_TYPE_STRUCT;
-        }
-        else if(ACHIOR_LABS_EQUAL(entry->aggregateKind,IDENTIFIER_AGGREGATE_STRUCT))
-        {
-            argument->type->dataType = AST_DATA_TYPE_UNION;
-        }
-    }
+    ACHIOR_LABS_STRUCT_INIT(struct String,newIdent);
 
 
-    char *ident                   = argument->ident.value.data;
-    u64 identLength               = ACHIOR_LABS_STRLEN(ident);
-    struct IdentifierEntry *entry = HashMapGet(identMap,ident,identLength);
+    IdentifierResolutionType(self,argument->type);
+
+    ident       = TOKEN_GET_VALUE_DATA(*(argument->ident));
+    identLength = ACHIOR_LABS_STRLEN(ident);
+    entry       = HashMapGet(identMap,ident,identLength);
 
     if(ACHIOR_LABS_NOT_NULL(entry))
     {
         if(ACHIOR_LABS_TRUE(entry->isCurrent))
         {
-            //puts("function argument redeclared : [error]");
+            IdentifierResolutionFatal(self,argument->ident,"function argument redeclared ",NULL,"assign a different name to your function argument"," newFunctionArgumentName",NULL);
             return;
         }
         
     }
 
-    struct String tmp = IdentifierResolutionMakeTmp(self);
-    entry             = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct IdentifierEntry,1);
-    IdentifierEntryNew(entry,true,true,IDENTIFIER_AGGREGATE_NONE,tmp);
+    newIdent = IdentifierResolutionMakeTmp(self);
+    entry   = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct IdentifierEntry,1);
+
+    IdentifierEntryNew(entry,true,true,IDENTIFIER_AGGREGATE_NONE,newIdent);
     
     HashMapAdd(identMap,ident,identLength,entry);
-    argument->ident.value = tmp;
-}
+    HashMapAdd(&self->program->identMap,ident,identLength,entry);
 
+    TOKEN_SET_VALUE(*(argument->ident),newIdent);
+}
 
 
 
 void IdentifierResolutionBlockStmt(struct IdentifierResolution *self,struct ASTBlockStmt *block,struct HashMap *identMap)
 {
-    
-    struct HashMap *newIdentMap = identMap;
-    for(u64 i = 0; i < block->stmts.len; i++)
+    ACHIOR_LABS_VAR_INIT(u64,stmtLength);
+
+    ACHIOR_LABS_STRUCT_INIT(struct HashMap,newIdentMap);
+
+    newIdentMap = IdentifierResolutionCopyIdentMap(self,identMap);
+    stmtLength  = LinkedListLength(&block->stmts);
+
+    for(u64 i = 0; i < stmtLength; i++)
     {
-        IdentifierResolutionStmt(self,LinkedListAt(&block->stmts,i),newIdentMap);
+        IdentifierResolutionStmt(self,LinkedListAt(&block->stmts,i),&newIdentMap);
     }   
 }
 
@@ -422,46 +775,46 @@ void IdentifierResolutionStmt(struct IdentifierResolution *self,struct ASTStatem
         return;
     }
 
-	switch(stmt->type)
+	switch(ASTSTATEMENT_GET_KIND(*stmt))
 	{
 		case AST_STATEMENT_RETURN:
 		{
-            IdentifierResolutionReturnStmt(self,stmt->stmt,identMap);
+            IdentifierResolutionReturnStmt(self,ASTSTATEMENT_GET_STMT(*stmt),identMap);
 			break;
 		}
         case AST_STATEMENT_LOOP:
 		{
-            IdentifierResolutionLoopStmt(self,stmt->stmt,identMap);
+            IdentifierResolutionLoopStmt(self,ASTSTATEMENT_GET_STMT(*stmt),identMap);
 			break;
 		}
         case AST_STATEMENT_WHILE:
 		{
-            IdentifierResolutionWhileStmt(self,stmt->stmt,identMap);
+            IdentifierResolutionWhileStmt(self,ASTSTATEMENT_GET_STMT(*stmt),identMap);
 			break;
 		}
         case AST_STATEMENT_BREAK:
 		{
-            IdentifierResolutionBreakStmt(self,stmt->stmt,identMap);
+            IdentifierResolutionBreakStmt(self,ASTSTATEMENT_GET_STMT(*stmt),identMap);
 			break;
 		}
         case AST_STATEMENT_CONTINUE:
 		{
-            IdentifierResolutionContinueStmt(self,stmt->stmt,identMap);
+            IdentifierResolutionContinueStmt(self,ASTSTATEMENT_GET_STMT(*stmt),identMap);
 			break;
 		}
         case AST_STATEMENT_IF:
 		{
-            IdentifierResolutionIfStmt(self,stmt->stmt,identMap);
+            IdentifierResolutionIfStmt(self,ASTSTATEMENT_GET_STMT(*stmt),identMap);
 			break;
 		}
         case AST_STATEMENT_VAR_DECL:
 		{
-            IdentifierResolutionVariableDeclStmt(self,stmt->stmt,identMap);
+            IdentifierResolutionVariableDeclStmt(self,ASTSTATEMENT_GET_STMT(*stmt),identMap);
 			break;
 		}
         case AST_STATEMENT_EXPRESSION:
 		{
-            IdentifierResolutionExpressionStmt(self,stmt->stmt,identMap);
+            IdentifierResolutionExpressionStmt(self,ASTSTATEMENT_GET_STMT(*stmt),identMap);
 			break;
 		}
 		default:
@@ -495,49 +848,38 @@ void IdentifierResolutionVariableDeclStmt(struct IdentifierResolution *self,stru
         return;
     }
 
-    if(ACHIOR_LABS_EQUAL(stmt->type->dataType,AST_DATA_TYPE_AGGREGATE))
-    {
-        struct ASTAggregateType *type = (struct ASTAggregateType *)stmt->type->type;
-        char *ident                   = type->ident.value.data;
-        u64 identLength               = ACHIOR_LABS_STRLEN(ident);
-        struct IdentifierEntry *entry = HashMapGet(&self->structMap,ident,identLength);
+    ACHIOR_LABS_PTR_INIT(struct IdentifierEntry,entry);
+    ACHIOR_LABS_PTR_INIT(char,ident);
+    
+    ACHIOR_LABS_VAR_INIT(u64,identLength);
 
-        if(ACHIOR_LABS_NULL(entry))
-        {
-            puts("unknown aggregate type encountered");
-        }
+    ACHIOR_LABS_STRUCT_INIT(struct String,newIdent);
 
-        if(ACHIOR_LABS_EQUAL(entry->aggregateKind,IDENTIFIER_AGGREGATE_STRUCT))
-        {
-            stmt->type->dataType = AST_DATA_TYPE_STRUCT;
-        }
-        else if(ACHIOR_LABS_EQUAL(entry->aggregateKind,IDENTIFIER_AGGREGATE_STRUCT))
-        {
-            stmt->type->dataType = AST_DATA_TYPE_UNION;
-        }
-    }
+    IdentifierResolutionType(self,stmt->type);
 
-
-    char *ident                   = stmt->ident.value.data;
-    u64 identLength               = ACHIOR_LABS_STRLEN(ident);
-    struct IdentifierEntry *entry = HashMapGet(identMap,ident,identLength);
+    ident       = TOKEN_GET_VALUE_DATA(*(stmt->ident));
+    identLength = ACHIOR_LABS_STRLEN(ident);
+    entry       = HashMapGet(identMap,ident,identLength);
 
     if(ACHIOR_LABS_NOT_NULL(entry))
     {
         if(ACHIOR_LABS_TRUE(entry->isCurrent))
         {
-            puts("variable identifier redeclared : [error]");
+            IdentifierResolutionFatal(self,stmt->ident,"variable identifier redeclared ",NULL,"assign a different name to your variable declaration"," newVariableName",NULL);
             return;
         }
         
     }
 
-    struct String tmp = IdentifierResolutionMakeTmp(self);
-    entry             = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct IdentifierEntry,1);
-    IdentifierEntryNew(entry,true,true,IDENTIFIER_AGGREGATE_NONE,tmp);
+    newIdent = IdentifierResolutionMakeTmp(self);
+    entry    = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct IdentifierEntry,1);
+
+    IdentifierEntryNew(entry,true,true,IDENTIFIER_AGGREGATE_NONE,newIdent);
     
     HashMapAdd(identMap,ident,identLength,entry);
-    stmt->ident.value = tmp;
+    HashMapAdd(&self->program->identMap,ident,identLength,entry);
+
+    TOKEN_SET_VALUE(*(stmt->ident),newIdent);
 
     if(ACHIOR_LABS_NOT_NULL(stmt->init))
     {
@@ -554,22 +896,30 @@ void IdentifierResolutionVariableDeclInit(struct IdentifierResolution *self,stru
         return;
     }
 
-    switch(init->initType)
+    switch(ASTVARIABLEDECLINIT_GET_INITKIND(*init))
     {
         case AST_VAR_DECL_INIT_SINGLE_INIT:
         {
-            struct ASTVariableDeclSingleInit *singleInit = (struct ASTVariableDeclSingleInit *)init->init;
+            ACHIOR_LABS_PTR_INIT(struct ASTVariableDeclSingleInit,singleInit);
+
+            singleInit = init->init;
 
             IdentifierResolutionExpression(self,singleInit->expr,identMap);
             break;
         }
         case AST_VAR_DECL_INIT_ARRAY_INIT:
         {
-            struct ASTVariableDeclArrayInit *arrayInit = (struct ASTVariableDeclArrayInit *)init->init;
+            ACHIOR_LABS_PTR_INIT(struct ASTVariableDeclInit,tmpInit);
+            ACHIOR_LABS_PTR_INIT(struct ASTVariableDeclArrayInit,arrayInit);
 
-            for(u64 i = 0; i < arrayInit->elements.len; i++)
+            ACHIOR_LABS_VAR_INIT(u64,elementLength);
+
+            arrayInit     = init->init;
+            elementLength = LinkedListLength(&arrayInit->elements);
+
+            for(u64 i = 0; i < elementLength; i++)
             {
-                struct ASTVariableDeclInit *tmpInit = LinkedListAt(&arrayInit->elements,i);
+                tmpInit = LinkedListAt(&arrayInit->elements,i);
 
                 IdentifierResolutionVariableDeclInit(self,tmpInit,identMap);
             }
@@ -588,21 +938,27 @@ void IdentifierResolutionIfStmt(struct IdentifierResolution *self,struct ASTIfSt
         return;
     }
     
+    ACHIOR_LABS_PTR_INIT(struct ASTIfElif,elifBlock);
+
+    ACHIOR_LABS_VAR_INIT(u64,elifLength);
+
     IdentifierResolutionExpression(self,stmt->expr,identMap);
     IdentifierResolutionBlockStmt(self,stmt->block,identMap);
 
-    for(u64 i = 0; i < stmt->elifs.len; i++)
-    {
-        struct ASTIfElif *Elif = LinkedListAt(&stmt->elifs,i);
 
-        IdentifierResolutionExpression(self,Elif->expr,identMap);   
-        IdentifierResolutionBlockStmt(self,Elif->block,identMap);
+    elifLength = LinkedListLength(&stmt->elifs);
+
+    for(u64 i = 0; i < elifLength; i++)
+    {
+        elifBlock = LinkedListAt(&stmt->elifs,i);
+
+        IdentifierResolutionExpression(self,elifBlock->expr,identMap);   
+        IdentifierResolutionBlockStmt(self,elifBlock->block,identMap);
     }
 
-    if(ACHIOR_LABS_NOT_NULL(stmt->else_block))
+    if(ACHIOR_LABS_NOT_NULL(stmt->elseBlock))
     {
-        
-        IdentifierResolutionBlockStmt(self,stmt->else_block->block,identMap);
+        IdentifierResolutionBlockStmt(self,stmt->elseBlock->block,identMap);
     }
 }
 
@@ -671,7 +1027,7 @@ void IdentifierResolutionExpression(struct IdentifierResolution *self,struct AST
     }
     
 
-	switch(expr->type)
+	switch(ASTEXPRESSION_GET_KIND(*expr))
     {
         case AST_EXPRESSION_LITERAL:
         {
@@ -679,92 +1035,107 @@ void IdentifierResolutionExpression(struct IdentifierResolution *self,struct AST
         }
         case AST_EXPRESSION_VARIABLE:
         {
-            IdentifierResolutionVariableExpr(self,expr->expr,identMap);
+            IdentifierResolutionVariableExpr(self,ASTEXPRESSION_GET_EXPR(*expr),identMap);
+            break;
+        }
+        case AST_EXPRESSION_PAREN:
+        {
+            IdentifierResolutionParenExpr(self,ASTEXPRESSION_GET_EXPR(*expr),identMap);
             break;
         }
         case AST_EXPRESSION_UNARY:
         {
-            IdentifierResolutionUnaryExpr(self,expr->expr,identMap);
+            IdentifierResolutionUnaryExpr(self,ASTEXPRESSION_GET_EXPR(*expr),identMap);
             break;
         }
         case AST_EXPRESSION_BINARY:
         {
-            IdentifierResolutionBinaryExpr(self,expr->expr,identMap);
+            IdentifierResolutionBinaryExpr(self,ASTEXPRESSION_GET_EXPR(*expr),identMap);
             break;
         }
         case AST_EXPRESSION_ASSIGNMENT:
         {
-            IdentifierResolutionAssignmentExpr(self,expr->expr,identMap);
+            IdentifierResolutionAssignmentExpr(self,ASTEXPRESSION_GET_EXPR(*expr),identMap);
             break;
         }
         case AST_EXPRESSION_CAST:
         {
-            IdentifierResolutionCastExpr(self,expr->expr,identMap);
+            IdentifierResolutionCastExpr(self,ASTEXPRESSION_GET_EXPR(*expr),identMap);
             break;
         }
         case AST_EXPRESSION_FUNCTION_CALL:
         {
-            IdentifierResolutionFunctionCallExpr(self,expr->expr,identMap);
+            IdentifierResolutionFunctionCallExpr(self,ASTEXPRESSION_GET_EXPR(*expr),identMap);
             break;
         }
         case AST_EXPRESSION_ADDRESS_OF:
         {
-            IdentifierResolutionAddressOfExpr(self,expr->expr,identMap);
+            IdentifierResolutionAddressOfExpr(self,ASTEXPRESSION_GET_EXPR(*expr),identMap);
             break;
         }
         case AST_EXPRESSION_PTR_READ:
         {
-            IdentifierResolutionPtrReadExpr(self,expr->expr,identMap);
+            IdentifierResolutionPtrReadExpr(self,ASTEXPRESSION_GET_EXPR(*expr),identMap);
             break;
         }
         case AST_EXPRESSION_PTR_WRITE:
         {
-            IdentifierResolutionPtrWriteExpr(self,expr->expr,identMap);
+            IdentifierResolutionPtrWriteExpr(self,ASTEXPRESSION_GET_EXPR(*expr),identMap);
             break;
         }
         case AST_EXPRESSION_PTR_OFFSET:
         {
-            IdentifierResolutionPtrOffsetExpr(self,expr->expr,identMap);
+            IdentifierResolutionPtrOffsetExpr(self,ASTEXPRESSION_GET_EXPR(*expr),identMap);
             break;
         }
         case AST_EXPRESSION_PTR_BYTE_OFFSET:
         {
-            IdentifierResolutionPtrByteOffsetExpr(self,expr->expr,identMap);
+            IdentifierResolutionPtrByteOffsetExpr(self,ASTEXPRESSION_GET_EXPR(*expr),identMap);
             break;
         }
         case AST_EXPRESSION_PTR_ADVANCE:
         {
-            IdentifierResolutionPtrAdvanceExpr(self,expr->expr,identMap);
+            IdentifierResolutionPtrAdvanceExpr(self,ASTEXPRESSION_GET_EXPR(*expr),identMap);
             break;
         }
         case AST_EXPRESSION_PTR_DIFF:
         {
-            IdentifierResolutionPtrDiffExpr(self,expr->expr,identMap);
+            IdentifierResolutionPtrDiffExpr(self,ASTEXPRESSION_GET_EXPR(*expr),identMap);
             break;
         }
         case AST_EXPRESSION_SUBSCRIPT:
         {
-            IdentifierResolutionSubscriptExpr(self,expr->expr,identMap);
+            IdentifierResolutionSubscriptExpr(self,ASTEXPRESSION_GET_EXPR(*expr),identMap);
             break;
         }
         case AST_EXPRESSION_AS_PTR:
         {
-            IdentifierResolutionAsPtrExpr(self,expr->expr,identMap);
+            IdentifierResolutionAsPtrExpr(self,ASTEXPRESSION_GET_EXPR(*expr),identMap);
             break;
         }
         case AST_EXPRESSION_LEN:
         {
-            IdentifierResolutionLenExpr(self,expr->expr,identMap);
+            IdentifierResolutionLenExpr(self,ASTEXPRESSION_GET_EXPR(*expr),identMap);
             break;
         }
         case AST_EXPRESSION_STRUCT_ACCESS:
         {
-            //IdentifierResolutionStructAccessExpr(self,expr->expr,identMap);
+            IdentifierResolutionStructAccessExpr(self,ASTEXPRESSION_GET_EXPR(*expr),identMap);
             break;
         }
         case AST_EXPRESSION_STRUCT_POINTER_ACCESS:
         {
-            //IdentifierResolutionStructPointerAccessExpr(self,expr->expr,identMap);
+            IdentifierResolutionStructPointerAccessExpr(self,ASTEXPRESSION_GET_EXPR(*expr),identMap);
+            break;
+        }
+        case AST_EXPRESSION_METHOD:
+        {
+            IdentifierResolutionMethodExpr(self,ASTEXPRESSION_GET_EXPR(*expr),identMap);
+            break;
+        }
+        case AST_EXPRESSION_PATH:
+        {
+            IdentifierResolutionPathExpr(self,ASTEXPRESSION_GET_EXPR(*expr),identMap);
             break;
         }
         default:
@@ -777,262 +1148,306 @@ void IdentifierResolutionExpression(struct IdentifierResolution *self,struct AST
 
 
 
-
-
-void IdentifierResolutionLenExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap)
+void IdentifierResolutionPathExpr(struct IdentifierResolution *self,struct ASTPathExpr *expr,struct HashMap *identMap)
 {
     if( ACHIOR_LABS_NULL(expr))
     {
         return;
     }
 
-    struct ASTLenExpr *len = (struct ASTLenExpr *)expr;
-    
+    if(ACHIOR_LABS_TRUE(expr->isFunction))
+    {
+        ACHIOR_LABS_PTR_INIT(struct ASTExpression,tmpExpr);
+
+        ACHIOR_LABS_VAR_INIT(u64,argumentLength);
+
+        argumentLength = expr->arguments.len;
+
+        for(u64 i = 0; i < argumentLength; i++)
+        {
+            tmpExpr = LinkedListAt(&expr->arguments,i);
+
+            IdentifierResolutionExpression(self,tmpExpr,identMap);
+        }
+    }
 }
 
-
-
-void IdentifierResolutionAsPtrExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap)
+void IdentifierResolutionMethodExpr(struct IdentifierResolution *self,struct ASTMethodExpr *expr,struct HashMap *identMap)
 {
     if( ACHIOR_LABS_NULL(expr))
     {
         return;
     }
 
-    struct ASTAsPtrExpr *asPtr = (struct ASTAsPtrExpr *)expr;
-    IdentifierResolutionExpression(self,asPtr->lhs,identMap);
-}
 
+    ACHIOR_LABS_PTR_INIT(struct ASTExpression,argument);
 
+    ACHIOR_LABS_VAR_INIT(u64,argumentLength);
 
+    IdentifierResolutionExpression(self,expr->lhs,identMap);
 
-void IdentifierResolutionSubscriptExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap)
-{
-    if( ACHIOR_LABS_NULL(expr))
+    argumentLength = expr->arguments.len;
+
+    for(u64 i = 0; i < argumentLength; i++)
     {
-        return;
-    }
+        argument = LinkedListAt(&expr->arguments,i);
 
-    struct ASTSubscriptExpr *subscript = (struct ASTSubscriptExpr *)expr;
-
-    IdentifierResolutionExpression(self,subscript->lhs,identMap);    
-    IdentifierResolutionExpression(self,subscript->index,identMap);
-}
-
-
-
-
-void IdentifierResolutionPtrDiffExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap)
-{
-    if( ACHIOR_LABS_NULL(expr))
-    {
-        return;
-    }
-
-    struct ASTPtrDiffExpr *ptrDiff = (struct ASTPtrDiffExpr *)expr;
-
-    IdentifierResolutionExpression(self,ptrDiff->lhs,identMap);
-    IdentifierResolutionExpression(self,ptrDiff->rhs,identMap);
-}
-
-
-
-
-
-
-void IdentifierResolutionPtrAdvanceExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap)
-{
-    if( ACHIOR_LABS_NULL(expr))
-    {
-        return;
-    }
-
-    struct ASTPtrAdvanceExpr *ptrAdvance = (struct ASTPtrAdvanceExpr *)expr;
-
-    IdentifierResolutionExpression(self,ptrAdvance->lhs,identMap);
-    IdentifierResolutionExpression(self,ptrAdvance->rhs,identMap);
-}
-
-
-
-
-
-
-void IdentifierResolutionPtrByteOffsetExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap)
-{
-    if( ACHIOR_LABS_NULL(expr))
-    {
-        return;
-    }
-
-    struct ASTPtrByteOffsetExpr *ptrByteOffset = (struct ASTPtrByteOffsetExpr *)expr;
-
-    
-    IdentifierResolutionExpression(self,ptrByteOffset->lhs,identMap);
-    IdentifierResolutionExpression(self,ptrByteOffset->rhs,identMap);
-}
-
-
-
-
-
-
-
-void IdentifierResolutionPtrOffsetExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap)
-{
-    if( ACHIOR_LABS_NULL(expr))
-    {
-        return;
-    }
-
-    struct ASTPtrOffsetExpr *ptrOffset = (struct ASTPtrOffsetExpr *)expr;
-
-    IdentifierResolutionExpression(self,ptrOffset->lhs,identMap);
-    IdentifierResolutionExpression(self,ptrOffset->rhs,identMap);
-}
-
-
-
-
-
-void IdentifierResolutionPtrWriteExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap)
-{
-    if( ACHIOR_LABS_NULL(expr))
-    {
-        return;
-    }
-
-    struct ASTPtrWriteExpr *ptrWrite = (struct ASTPtrWriteExpr *)expr;
-
-    
-    IdentifierResolutionExpression(self,ptrWrite->lhs,identMap);
-    IdentifierResolutionExpression(self,ptrWrite->rhs,identMap);
-}
-
-
-
-
-
-
-void IdentifierResolutionPtrReadExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap)
-{
-    if( ACHIOR_LABS_NULL(expr))
-    {
-        return;
-    }
-
-    struct ASTPtrReadExpr *ptrRead = (struct ASTPtrReadExpr *)expr;
-
-    IdentifierResolutionExpression(self,ptrRead->lhs,identMap);
-}
-
-
-
-void IdentifierResolutionAddressOfExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap)
-{
-    if( ACHIOR_LABS_NULL(expr))
-    {
-        return;
-    }
-
-    struct ASTAddressOfExpr *addressOf = (struct ASTAddressOfExpr *)expr;
-    
-    IdentifierResolutionExpression(self,addressOf->rhs,identMap);
-}
-
-
-
-void IdentifierResolutionFunctionCallExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap)
-{
-    if( ACHIOR_LABS_NULL(expr))
-    {
-        return;
-    }
-
-    struct ASTFunctionCallExpr *function = (struct ASTFunctionCallExpr *)expr;
-
-    IdentifierResolutionExpression(self,function->base,identMap);    
-
-    for(u64 i = 0; i < function->arguments.len; i++)
-    {
-        struct ASTExpression *argument = LinkedListAt(&function->arguments,i);
         IdentifierResolutionExpression(self,argument,identMap);
     }
 
-    struct ASTVariableExpr *variableExpr     = ((struct ASTVariableExpr *)function->base->expr);
-    char *ident                              = variableExpr->ident.value.data;
-    u64 identLength                          = ACHIOR_LABS_STRLEN(ident);
-    struct ASTFunctionAttributes *attributes = HashMapGet(&self->functionAttributes,ident,identLength);
-
-    if(ACHIOR_LABS_NOT_NULL(attributes))
-    {
-        function->attributes = attributes;
-    }
-    else
-    {
-        exit(11);
-    }
 }
 
 
 
-void IdentifierResolutionCastExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap)
+void IdentifierResolutionStructPointerAccessExpr(struct IdentifierResolution *self,struct ASTStructPointerAccessExpr *expr,struct HashMap *identMap)
 {
     if( ACHIOR_LABS_NULL(expr))
     {
         return;
     }
 
-    struct ASTCastExpr *cast = (struct ASTCastExpr *)expr;
+    IdentifierResolutionExpression(self,expr->lhs,identMap);
+}
+
+
+void IdentifierResolutionStructAccessExpr(struct IdentifierResolution *self,struct ASTStructAccessExpr *expr,struct HashMap *identMap)
+{
+    if( ACHIOR_LABS_NULL(expr))
+    {
+        return;
+    }
+
+    IdentifierResolutionExpression(self,expr->lhs,identMap);
+}
+
+
+void IdentifierResolutionLenExpr(struct IdentifierResolution *self,struct ASTLenExpr *expr,struct HashMap *identMap)
+{
+    if( ACHIOR_LABS_NULL(expr))
+    {
+        return;
+    }
+}
+
+
+
+void IdentifierResolutionAsPtrExpr(struct IdentifierResolution *self,struct ASTAsPtrExpr *expr,struct HashMap *identMap)
+{
+    if( ACHIOR_LABS_NULL(expr))
+    {
+        return;
+    }
+
     
-    IdentifierResolutionExpression(self,cast->lhs,identMap);
+    IdentifierResolutionExpression(self,expr->lhs,identMap);
 }
 
 
 
-void IdentifierResolutionAssignmentExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap)
+
+void IdentifierResolutionSubscriptExpr(struct IdentifierResolution *self,struct ASTSubscriptExpr *expr,struct HashMap *identMap)
 {
     if( ACHIOR_LABS_NULL(expr))
     {
         return;
     }
 
-    struct ASTAssignmentExpr *assign = (struct ASTAssignmentExpr *)expr;
+
+    IdentifierResolutionExpression(self,expr->lhs,identMap);    
+    IdentifierResolutionExpression(self,expr->index,identMap);
+}
+
+
+
+
+void IdentifierResolutionPtrDiffExpr(struct IdentifierResolution *self,struct ASTPtrDiffExpr *expr,struct HashMap *identMap)
+{
+    if( ACHIOR_LABS_NULL(expr))
+    {
+        return;
+    }
+
+
+    IdentifierResolutionExpression(self,expr->lhs,identMap);
+    IdentifierResolutionExpression(self,expr->rhs,identMap);
+}
+
+
+
+
+
+
+void IdentifierResolutionPtrAdvanceExpr(struct IdentifierResolution *self,struct ASTPtrAdvanceExpr *expr,struct HashMap *identMap)
+{
+    if( ACHIOR_LABS_NULL(expr))
+    {
+        return;
+    }
+
+
+    IdentifierResolutionExpression(self,expr->lhs,identMap);
+    IdentifierResolutionExpression(self,expr->rhs,identMap);
+}
+
+
+
+
+
+
+void IdentifierResolutionPtrByteOffsetExpr(struct IdentifierResolution *self,struct ASTPtrByteOffsetExpr *expr,struct HashMap *identMap)
+{
+    if( ACHIOR_LABS_NULL(expr))
+    {
+        return;
+    }
+
     
-    IdentifierResolutionExpression(self,assign->lhs,identMap);
-    IdentifierResolutionExpression(self,assign->rhs,identMap);
+    IdentifierResolutionExpression(self,expr->lhs,identMap);
+    IdentifierResolutionExpression(self,expr->rhs,identMap);
 }
 
 
-void IdentifierResolutionBinaryExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap)
+
+
+
+
+
+void IdentifierResolutionPtrOffsetExpr(struct IdentifierResolution *self,struct ASTPtrOffsetExpr *expr,struct HashMap *identMap)
 {
     if( ACHIOR_LABS_NULL(expr))
     {
         return;
     }
 
-    struct ASTBinaryExpr *binary = (struct ASTBinaryExpr *)expr;
-
-    IdentifierResolutionExpression(self,binary->lhs,identMap);
-    IdentifierResolutionExpression(self,binary->rhs,identMap);
+    IdentifierResolutionExpression(self,expr->lhs,identMap);
+    IdentifierResolutionExpression(self,expr->rhs,identMap);
 }
 
 
 
-void IdentifierResolutionUnaryExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap)
+
+
+void IdentifierResolutionPtrWriteExpr(struct IdentifierResolution *self,struct ASTPtrWriteExpr *expr,struct HashMap *identMap)
 {
     if( ACHIOR_LABS_NULL(expr))
     {
         return;
     }
 
-    struct ASTUnaryExpr *unary = (struct ASTUnaryExpr *)expr;
+
+    IdentifierResolutionExpression(self,expr->lhs,identMap);
+    IdentifierResolutionExpression(self,expr->rhs,identMap);
+}
+
+
+
+
+
+
+void IdentifierResolutionPtrReadExpr(struct IdentifierResolution *self,struct ASTPtrReadExpr *expr,struct HashMap *identMap)
+{
+    if( ACHIOR_LABS_NULL(expr))
+    {
+        return;
+    }
+
+    IdentifierResolutionExpression(self,expr->lhs,identMap);
+}
+
+
+
+void IdentifierResolutionAddressOfExpr(struct IdentifierResolution *self,struct ASTAddressOfExpr *expr,struct HashMap *identMap)
+{
+    if( ACHIOR_LABS_NULL(expr))
+    {
+        return;
+    }
     
-    IdentifierResolutionExpression(self,unary->rhs,identMap);
+    IdentifierResolutionExpression(self,expr->rhs,identMap);
 }
 
 
-void IdentifierResolutionVariableExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap)
+
+void IdentifierResolutionFunctionCallExpr(struct IdentifierResolution *self,struct ASTFunctionCallExpr *expr,struct HashMap *identMap)
+{
+    if( ACHIOR_LABS_NULL(expr))
+    {
+        return;
+    }
+
+    ACHIOR_LABS_PTR_INIT(struct ASTExpression,argument);
+
+    ACHIOR_LABS_VAR_INIT(u64,argumentLength);
+
+
+    IdentifierResolutionExpression(self,expr->base,identMap);
+
+    argumentLength = expr->arguments.len;
+
+    for(u64 i = 0; i < argumentLength; i++)
+    {
+        argument = LinkedListAt(&expr->arguments,i);
+        
+        IdentifierResolutionExpression(self,argument,identMap);
+    }
+   
+
+    if(ACHIOR_LABS_EQUAL(ASTEXPRESSION_GET_KIND(*(expr->base)),AST_EXPRESSION_VARIABLE))
+    {
+        ACHIOR_LABS_PTR_INIT(struct IdentifierEntry,entry);
+        ACHIOR_LABS_PTR_INIT(struct ASTVariableExpr,variableExpr);
+        ACHIOR_LABS_PTR_INIT(struct ASTFunctionAttributes,attributes);
+        ACHIOR_LABS_PTR_INIT(char,ident);
+        
+        ACHIOR_LABS_VAR_INIT(u64,identLength);
+
+
+        variableExpr = expr->base->expr;
+        ident        = TOKEN_GET_VALUE_DATA(*(variableExpr->ident));
+        identLength  = ACHIOR_LABS_STRLEN(ident);
+        entry        = HashMapGet(identMap,ident,identLength);
+        attributes   = HashMapGet(&self->functionAttributes,ident,identLength);
+
+        if(ACHIOR_LABS_NOT_NULL(attributes))
+        {
+            expr->attributes = attributes;
+        }
+        else
+        {
+            //exit(11);
+        }
+    }
+    
+    
+}
+
+
+
+void IdentifierResolutionCastExpr(struct IdentifierResolution *self,struct ASTCastExpr *expr,struct HashMap *identMap)
+{
+    if( ACHIOR_LABS_NULL(expr))
+    {
+        return;
+    }
+    
+    IdentifierResolutionExpression(self,expr->lhs,identMap);
+}
+
+
+
+void IdentifierResolutionAssignmentExpr(struct IdentifierResolution *self,struct ASTAssignmentExpr *expr,struct HashMap *identMap)
+{
+    if( ACHIOR_LABS_NULL(expr))
+    {
+        return;
+    }
+    
+    IdentifierResolutionExpression(self,expr->lhs,identMap);
+    IdentifierResolutionExpression(self,expr->rhs,identMap);
+}
+
+
+void IdentifierResolutionBinaryExpr(struct IdentifierResolution *self,struct ASTBinaryExpr *expr,struct HashMap *identMap)
 {
     if( ACHIOR_LABS_NULL(expr))
     {
@@ -1040,36 +1455,82 @@ void IdentifierResolutionVariableExpr(struct IdentifierResolution *self,void *ex
     }
 
 
-    struct ASTVariableExpr *variable = (struct ASTVariableExpr *)expr;
+    IdentifierResolutionExpression(self,expr->lhs,identMap);
+    IdentifierResolutionExpression(self,expr->rhs,identMap);
+}
 
-    char *ident                      = variable->ident.value.data;
-    u64 identLength                  = ACHIOR_LABS_STRLEN(ident);
-    struct IdentifierEntry *entry    = HashMapGet(identMap,ident,identLength);
+
+
+void IdentifierResolutionUnaryExpr(struct IdentifierResolution *self,struct ASTUnaryExpr *expr,struct HashMap *identMap)
+{
+    if( ACHIOR_LABS_NULL(expr))
+    {
+        return;
+    }
+
+    
+    IdentifierResolutionExpression(self,expr->rhs,identMap);
+}
+
+
+void IdentifierResolutionParenExpr(struct IdentifierResolution *self,struct ASTParenExpr *expr,struct HashMap *identMap)
+{
+    if( ACHIOR_LABS_NULL(expr))
+    {
+        return;
+    }
+    
+    IdentifierResolutionExpression(self,expr->expr,identMap);
+}
+
+
+void IdentifierResolutionVariableExpr(struct IdentifierResolution *self,struct ASTVariableExpr *expr,struct HashMap *identMap)
+{
+    if( ACHIOR_LABS_NULL(expr))
+    {
+        return;
+    }
+
+    ACHIOR_LABS_PTR_INIT(struct IdentifierEntry,entry);
+    ACHIOR_LABS_PTR_INIT(struct ASTFunctionAttributes,attributes);
+    ACHIOR_LABS_PTR_INIT(char,ident);
+    
+    ACHIOR_LABS_VAR_INIT(u64,identLength);
+
+
+    ident       = TOKEN_GET_VALUE_DATA(*(expr->ident));
+    identLength = ACHIOR_LABS_STRLEN(ident);
+    entry       = HashMapGet(identMap,ident,identLength);
 
     if(ACHIOR_LABS_NULL(entry))
     {
-        puts("illegal use of an undeclared variable identifier : [error]");
+        puts("illegal use of an undeclared variable identifier : [error] => IR");
+        puts(ident);
+        IdentifierResolutionFatal(self,expr->ident,"illegal use of an undeclared variable identifier  ",NULL,"variable must be declared before use",NULL,NULL);
         return;
     }
 
-
-    variable->ident.value = entry->ident;
+    TOKEN_SET_VALUE(*(expr->ident),entry->ident);
 }
 
 
 
 struct String IdentifierResolutionMakeTmp(struct IdentifierResolution *self)
 {
-    struct String tmp;
+    ACHIOR_LABS_STRUCT_INIT(struct String,tmp);
+    ACHIOR_LABS_ARRAY_INIT(char,buf,10);
+    ACHIOR_LABS_VAR_INIT(char,counter);
+
     StringNew(&tmp,50,self->bump);
 
-    char counter = self->globalCounter++;
+    counter = self->globalCounter++;
 
-    char buf[10] = {0};
     ACHIOR_LABS_SNPRINTF(buf,sizeof(buf),"%lu",self->globalCounter);
     
+    StringPushBack(&tmp,self->moduleName);
     StringPushBack(&tmp,"__C4C");
     StringPushBack(&tmp,buf);
 
-    return tmp;
+
+    return StringReplacePathSeparators(tmp);
 }

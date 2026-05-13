@@ -7,6 +7,7 @@ enum IdentifierAggregateKind
 {
     IDENTIFIER_AGGREGATE_NONE,
     IDENTIFIER_AGGREGATE_STRUCT,
+    IDENTIFIER_AGGREGATE_ENUM,
     IDENTIFIER_AGGREGATE_UNION,
     IDENTIFIER_AGGREGATE_SUM,
 };
@@ -25,24 +26,29 @@ struct IdentifierResolution
 {
     struct ASTProgram *program;
     u64 globalCounter;
+    char *moduleName;
+    char *moduleSource;
+    u64 sourceLength;
     struct HashMap functionAttributes;
     struct HashMap structMap;
+    struct DiagnosticEngine *engine;
     struct BumpAllocator *bump;
 };
 
 
-
-bool IdentifierResolutionNew(struct IdentifierResolution *self,struct ASTProgram *program,char *fileName,u64 globalCounter,struct BumpAllocator *bump);
+bool IdentifierResolutionNew(struct IdentifierResolution *self,char *moduleName,char *moduleSource,struct ASTProgram *program,u64 globalCounter,struct DiagnosticEngine *engine,struct BumpAllocator *bump);
 
 void IdentifierResolutionProgram(struct IdentifierResolution *self,struct ASTProgram *program,struct HashMap *identMap);
 
 void IdentifierResolutionDeclaration(struct IdentifierResolution *self,struct ASTDeclaration *decl,struct HashMap *identMap);
 
+void IdentifierResolutionType(struct IdentifierResolution *self,struct ASTType *type);
+
+
+void IdentifierResolutionEnumDecl(struct IdentifierResolution *self,struct ASTEnumDecl *decl,struct HashMap *identMap);
 
 void IdentifierResolutionStructDecl(struct IdentifierResolution *self,struct ASTStructDecl *decl,struct HashMap *identMap);
 void IdentifierResolutionStructProperty(struct IdentifierResolution *self,struct ASTStructProperty *property,struct HashMap *identMap);
-
-void IdentifierResolutionUnionDecl(struct IdentifierResolution *self,struct ASTUnionDecl *decl,struct HashMap *identMap);
 
 
 void IdentifierResolutionImplDecl(struct IdentifierResolution *self,struct ASTImplDecl *decl,struct HashMap *identMap);
@@ -53,7 +59,7 @@ void IdentifierResolutionSumEnum(struct IdentifierResolution *self,char *ident,s
 
 void IdentifierResolutionSumVariants(struct IdentifierResolution *self,struct LinkedList variants,struct HashMap *identMap);
 
-void IdentifierResolutionFunctionDecl(struct IdentifierResolution *self,struct ASTFunctionDecl *function,struct HashMap *identMap);
+void IdentifierResolutionFunctionDecl(struct IdentifierResolution *self,struct ASTFunctionDecl *function,struct String structIdent,struct HashMap *identMap);
 void IdentifierResolutionFunctionArgument(struct IdentifierResolution *self,struct ASTFunctionArgument *argument,struct HashMap *identMap);
 
 
@@ -77,49 +83,49 @@ void IdentifierResolutionExpressionStmt(struct IdentifierResolution *self,struct
 
 void IdentifierResolutionExpression(struct IdentifierResolution *self,struct ASTExpression *expr,struct HashMap *identMap);
 
+void IdentifierResolutionPathExpr(struct IdentifierResolution *self,struct ASTPathExpr *expr,struct HashMap *identMap);
 
+void IdentifierResolutionMethodExpr(struct IdentifierResolution *self,struct ASTMethodExpr *expr,struct HashMap *identMap);
 
-void IdentifierResolutionLiteralExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap);
+void IdentifierResolutionStructPointerAccessExpr(struct IdentifierResolution *self,struct ASTStructPointerAccessExpr *expr,struct HashMap *identMap);
 
+void IdentifierResolutionStructAccessExpr(struct IdentifierResolution *self,struct ASTStructAccessExpr *expr,struct HashMap *identMap);
 
-void IdentifierResolutionVariableExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap);
+void IdentifierResolutionLenExpr(struct IdentifierResolution *self,struct ASTLenExpr *expr,struct HashMap *identMap);
 
+void IdentifierResolutionAsPtrExpr(struct IdentifierResolution *self,struct ASTAsPtrExpr *expr,struct HashMap *identMap);
 
-void IdentifierResolutionUnaryExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap);
-void IdentifierResolutionUnaryOperator(struct IdentifierResolution *self,enum ASTUnaryOperator op,struct HashMap *identMap);
+void IdentifierResolutionSubscriptExpr(struct IdentifierResolution *self,struct ASTSubscriptExpr *expr,struct HashMap *identMap);
 
-void IdentifierResolutionBinaryExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap);
-void IdentifierResolutionBinaryOperator(struct IdentifierResolution *self,enum ASTBinaryOperator op,struct HashMap *identMap);
+void IdentifierResolutionPtrDiffExpr(struct IdentifierResolution *self,struct ASTPtrDiffExpr *expr,struct HashMap *identMap);
 
-void IdentifierResolutionAssignmentExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap);
+void IdentifierResolutionPtrAdvanceExpr(struct IdentifierResolution *self,struct ASTPtrAdvanceExpr *expr,struct HashMap *identMap);
 
-void IdentifierResolutionAssignmentOperator(struct IdentifierResolution *self,enum ASTAssignmentOperator op,struct HashMap *identMap);
+void IdentifierResolutionPtrByteOffsetExpr(struct IdentifierResolution *self,struct ASTPtrByteOffsetExpr *expr,struct HashMap *identMap);
 
-void IdentifierResolutionFunctionCallExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap);
+void IdentifierResolutionPtrOffsetExpr(struct IdentifierResolution *self,struct ASTPtrOffsetExpr *expr,struct HashMap *identMap);
 
-void IdentifierResolutionCastExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap);
+void IdentifierResolutionPtrWriteExpr(struct IdentifierResolution *self,struct ASTPtrWriteExpr *expr,struct HashMap *identMap);
 
-void IdentifierResolutionAddressOfExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap);
+void IdentifierResolutionPtrReadExpr(struct IdentifierResolution *self,struct ASTPtrReadExpr *expr,struct HashMap *identMap);
 
-void IdentifierResolutionPtrReadExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap);
+void IdentifierResolutionAddressOfExpr(struct IdentifierResolution *self,struct ASTAddressOfExpr *expr,struct HashMap *identMap);
 
-void IdentifierResolutionPtrWriteExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap);
+void IdentifierResolutionFunctionCallExpr(struct IdentifierResolution *self,struct ASTFunctionCallExpr *expr,struct HashMap *identMap);
 
-void IdentifierResolutionPtrOffsetExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap);
+void IdentifierResolutionCastExpr(struct IdentifierResolution *self,struct ASTCastExpr *expr,struct HashMap *identMap);
 
-void IdentifierResolutionPtrByteOffsetExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap);
+void IdentifierResolutionAssignmentExpr(struct IdentifierResolution *self,struct ASTAssignmentExpr *expr,struct HashMap *identMap);
 
-void IdentifierResolutionPtrAdvanceExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap);
+void IdentifierResolutionBinaryExpr(struct IdentifierResolution *self,struct ASTBinaryExpr *expr,struct HashMap *identMap);
 
-void IdentifierResolutionPtrDiffExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap);
+void IdentifierResolutionUnaryExpr(struct IdentifierResolution *self,struct ASTUnaryExpr *expr,struct HashMap *identMap);
 
-void IdentifierResolutionSubscriptExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap);
+void IdentifierResolutionParenExpr(struct IdentifierResolution *self,struct ASTParenExpr *expr,struct HashMap *identMap);
 
-void IdentifierResolutionAsPtrExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap);
-
-void IdentifierResolutionLenExpr(struct IdentifierResolution *self,void *expr,struct HashMap *identMap);
-
+void IdentifierResolutionVariableExpr(struct IdentifierResolution *self,struct ASTVariableExpr *expr,struct HashMap *identMap);
 
 struct String IdentifierResolutionMakeTmp(struct IdentifierResolution *self);
+
 
 #endif

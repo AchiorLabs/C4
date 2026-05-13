@@ -3,27 +3,28 @@
 
 
 
-char *ReadFileToString(char *file_name,struct BumpAllocator *bump)
+char *ReadFileToString(const char *file_name,struct BumpAllocator *bump)
 {
-    FILE *fin = ACHIOR_LABS_FOPEN(file_name, "rb");
+    FILE *fin = ACHIOR_LABS_FOPEN(file_name,"rb");
     
     if( ACHIOR_LABS_NULL(fin))
     {
         ACHIOR_LABS_PERROR("fopen failed ");
+        ACHIOR_LABS_PRINT(file_name);
 	    return NULL;
     }
 
-    ACHIOR_LABS_FSEEK(fin, 0, SEEK_END);
+    ACHIOR_LABS_FSEEK(fin,0,SEEK_END);
     i64 size = ACHIOR_LABS_FTELL(fin);
     ACHIOR_LABS_FSEEK(fin,0,SEEK_SET);
 
-    char *file_source = ACHIOR_LABS_ARENA_ALLOC(bump,char,size + 1);
+    char *file_source = ACHIOR_LABS_ARENA_ALLOC(bump,char,size + 10);
     if ( ACHIOR_LABS_NULL(file_source))
     {
         ACHIOR_LABS_RETURN_DEFER(defer);
     }
 
-    ACHIOR_LABS_FREAD(file_source, 1, size, fin);
+    ACHIOR_LABS_FREAD(file_source,1,size,fin);
     file_source[size] = '\0';
 
 defer:
@@ -37,99 +38,104 @@ defer:
 
 struct CmdLineArgumentParser MainSetUpCmdLineArguments(int argc,char **argv,struct BumpAllocator *bump)
 {
-    struct CmdLineArgumentParser parser;
+    ACHIOR_LABS_STRUCT_INIT(struct CmdLineArgumentParser,parser);
+    ACHIOR_LABS_PTR_INIT(struct CmdLineArgument,argument);
+
     CmdLineArgumentParserNew(&parser,"c4c","c4c compiler toolchain","0.0.0 [alpha]",bump);
 
 
 
-    struct CmdLineArgument argument;
-    CmdLineArgumentNew(&argument,CMD_LINE_ARGUMENT_STRING,"i","input","Input C4 source file");
+    argument = C4MakeCmdLineArgument(bump,CMD_LINE_ARGUMENT_STRING,"i","input","Input C4 source file");
     CmdLineArgumentParserAddArgument(&parser,argument);
 
-    CmdLineArgumentNew(&argument,CMD_LINE_ARGUMENT_STRING,"t","target","Target backend ((x86_64-linux-nasm, x86_64-windows-msvc, etc)");
+    argument = C4MakeCmdLineArgument(bump,CMD_LINE_ARGUMENT_STRING,"t","target","Target backend ((x86_64-linux-nasm,x86_64-windows-msvc,etc)");
     CmdLineArgumentParserAddArgument(&parser,argument);
 
-    CmdLineArgumentNew(&argument,CMD_LINE_ARGUMENT_STRING,"o","output","Output file name");
+    argument = C4MakeCmdLineArgument(bump,CMD_LINE_ARGUMENT_STRING,"o","output","Output file name");
     CmdLineArgumentParserAddArgument(&parser,argument);
 
 
-
-
-
-    CmdLineArgumentNew(&argument,CMD_LINE_ARGUMENT_FLAG,NULL,"emit-asm","Emit assembly");
-    CmdLineArgumentParserAddArgument(&parser,argument);
-
-    CmdLineArgumentNew(&argument,CMD_LINE_ARGUMENT_FLAG,NULL,"emit-c4il","Emit C4 IL");
-    CmdLineArgumentParserAddArgument(&parser,argument);
-
-    CmdLineArgumentNew(&argument,CMD_LINE_ARGUMENT_FLAG,NULL,"emit-c","Emit C Code");
-    CmdLineArgumentParserAddArgument(&parser,argument);
-
-    CmdLineArgumentNew(&argument,CMD_LINE_ARGUMENT_FLAG,NULL,"emit-ast","Emit AST");
-    CmdLineArgumentParserAddArgument(&parser,argument);
-
-    CmdLineArgumentNew(&argument,CMD_LINE_ARGUMENT_FLAG,NULL,"emit-tokens","Emit tokens");
+    argument = C4MakeCmdLineArgument(bump,CMD_LINE_ARGUMENT_LIST,NULL,"asmfiles","assembly files");
     CmdLineArgumentParserAddArgument(&parser,argument);
 
 
 
 
 
+    argument = C4MakeCmdLineArgument(bump,CMD_LINE_ARGUMENT_FLAG,NULL,"emit-asm","Emit assembly");
+    CmdLineArgumentParserAddArgument(&parser,argument);
 
-    CmdLineArgumentNew(&argument,CMD_LINE_ARGUMENT_FLAG,NULL,"lex-only","Only do lexical analysis");
+    argument = C4MakeCmdLineArgument(bump,CMD_LINE_ARGUMENT_FLAG,NULL,"emit-c4il","Emit C4 IL");
+    CmdLineArgumentParserAddArgument(&parser,argument);
+
+    argument = C4MakeCmdLineArgument(bump,CMD_LINE_ARGUMENT_FLAG,NULL,"emit-c","Emit C Code");
+    CmdLineArgumentParserAddArgument(&parser,argument);
+
+    argument = C4MakeCmdLineArgument(bump,CMD_LINE_ARGUMENT_FLAG,NULL,"emit-ast","Emit AST");
+    CmdLineArgumentParserAddArgument(&parser,argument);
+
+    argument = C4MakeCmdLineArgument(bump,CMD_LINE_ARGUMENT_FLAG,NULL,"emit-tokens","Emit tokens");
+    CmdLineArgumentParserAddArgument(&parser,argument);
+
+
+
+
+
+
+    argument = C4MakeCmdLineArgument(bump,CMD_LINE_ARGUMENT_FLAG,NULL,"lex-only","Only do lexical analysis");
+    CmdLineArgumentParserAddArgument(&parser,argument);
+
+    
+
+    argument = C4MakeCmdLineArgument(bump,CMD_LINE_ARGUMENT_FLAG,NULL,"parse-only","Only do syntax analysis");
     CmdLineArgumentParserAddArgument(&parser,argument);
 
     
 
-    CmdLineArgumentNew(&argument,CMD_LINE_ARGUMENT_FLAG,NULL,"parse-only","Only do syntax analysis");
+
+    argument = C4MakeCmdLineArgument(bump,CMD_LINE_ARGUMENT_FLAG,NULL,"c-only","Only do generate the c code");
+    CmdLineArgumentParserAddArgument(&parser,argument);
+
+    argument = C4MakeCmdLineArgument(bump,CMD_LINE_ARGUMENT_FLAG,NULL,"c4il-only","Only do generate the c4il IR");
+    CmdLineArgumentParserAddArgument(&parser,argument);
+
+
+    argument = C4MakeCmdLineArgument(bump,CMD_LINE_ARGUMENT_FLAG,NULL,"verify-c4il","Verify C4 IL");
     CmdLineArgumentParserAddArgument(&parser,argument);
 
     
-
-
-    CmdLineArgumentNew(&argument,CMD_LINE_ARGUMENT_FLAG,NULL,"c-only","Only do generate the c code");
-    CmdLineArgumentParserAddArgument(&parser,argument);
-
-    CmdLineArgumentNew(&argument,CMD_LINE_ARGUMENT_FLAG,NULL,"c4il-only","Only do generate the c4il IR");
+    argument = C4MakeCmdLineArgument(bump,CMD_LINE_ARGUMENT_FLAG,NULL,"compile-only","Only do generate the assembly");
     CmdLineArgumentParserAddArgument(&parser,argument);
 
 
-    CmdLineArgumentNew(&argument,CMD_LINE_ARGUMENT_FLAG,NULL,"verify-c4il","Verify C4 IL");
-    CmdLineArgumentParserAddArgument(&parser,argument);
-
-    
-    CmdLineArgumentNew(&argument,CMD_LINE_ARGUMENT_FLAG,NULL,"compile-only","Only do generate the assembly");
-    CmdLineArgumentParserAddArgument(&parser,argument);
-
-
-    CmdLineArgumentNew(&argument,CMD_LINE_ARGUMENT_FLAG,NULL,"assemble-only","Only do assemble generated assembly");
+    argument = C4MakeCmdLineArgument(bump,CMD_LINE_ARGUMENT_FLAG,NULL,"assemble-only","Only do assemble generated assembly");
     CmdLineArgumentParserAddArgument(&parser,argument);
 
     
     
-    CmdLineArgumentNew(&argument,CMD_LINE_ARGUMENT_FLAG,NULL,"fomit-frame-pointer","Omit frame pointer");
+    argument = C4MakeCmdLineArgument(bump,CMD_LINE_ARGUMENT_FLAG,NULL,"fomit-frame-pointer","Omit frame pointer");
     CmdLineArgumentParserAddArgument(&parser,argument);
 
-    CmdLineArgumentNew(&argument,CMD_LINE_ARGUMENT_FLAG,NULL,"fno-red-zone","Disable red zone");
+    argument = C4MakeCmdLineArgument(bump,CMD_LINE_ARGUMENT_FLAG,NULL,"fno-red-zone","Disable red zone");
     CmdLineArgumentParserAddArgument(&parser,argument);
 
-    CmdLineArgumentNew(&argument,CMD_LINE_ARGUMENT_FLAG,NULL,"fPIC","Position independent code");
-    CmdLineArgumentParserAddArgument(&parser,argument);
-
-
-
-    CmdLineArgumentNew(&argument,CMD_LINE_ARGUMENT_FLAG,NULL,"library","produce a library");
+    argument = C4MakeCmdLineArgument(bump,CMD_LINE_ARGUMENT_FLAG,NULL,"fPIC","Position independent code");
     CmdLineArgumentParserAddArgument(&parser,argument);
 
 
-    CmdLineArgumentNew(&argument,CMD_LINE_ARGUMENT_FLAG,NULL,"executable","produce an executable");
+
+    argument = C4MakeCmdLineArgument(bump,CMD_LINE_ARGUMENT_FLAG,NULL,"library","produce a library");
     CmdLineArgumentParserAddArgument(&parser,argument);
 
 
-    CmdLineArgumentNew(&argument,CMD_LINE_ARGUMENT_FLAG,"h","help","Display this help Message");
+    argument = C4MakeCmdLineArgument(bump,CMD_LINE_ARGUMENT_FLAG,NULL,"executable","produce an executable");
     CmdLineArgumentParserAddArgument(&parser,argument);
 
-    CmdLineArgumentNew(&argument,CMD_LINE_ARGUMENT_FLAG,"v","version","Show the Compiler version");
+
+    argument = C4MakeCmdLineArgument(bump,CMD_LINE_ARGUMENT_FLAG,"h","help","Display this help Message");
+    CmdLineArgumentParserAddArgument(&parser,argument);
+
+    argument = C4MakeCmdLineArgument(bump,CMD_LINE_ARGUMENT_FLAG,"v","version","Show the Compiler version");
     CmdLineArgumentParserAddArgument(&parser,argument);
 
     CmdLineArgumentParserParse(&parser,argc,argv);
@@ -142,31 +148,38 @@ struct CmdLineArgumentParser MainSetUpCmdLineArguments(int argc,char **argv,stru
 
 
 
-char *MainGetDesription(struct CmdLineArgumentParser *self,char *long_name)
+char *MainGetDesription(struct CmdLineArgumentParser *self,char *longName)
 {
-    struct CmdLineArgument argument = CmdLineArgumentParserGet(self,long_name);
-    return argument.is_active ? argument.description : NULL;
-}
-
-char *MainGetValueString(struct CmdLineArgumentParser *self,char *long_name)
-{
-    struct CmdLineArgument argument = CmdLineArgumentParserGet(self,long_name);
-    return argument.is_active ? argument.value.string : NULL;
+    struct CmdLineArgument *argument = CmdLineArgumentParserGet(self,longName);
+    return argument->isActive ? argument->description : NULL;
 }
 
 
-
-bool MainGetValueFlag(struct CmdLineArgumentParser *self,char *long_name)
+struct LinkedList MainGetValueList(struct CmdLineArgumentParser *self,char *longName)
 {
-    struct CmdLineArgument argument = CmdLineArgumentParserGet(self,long_name);
-    return argument.is_active ? argument.value.flag : false;
+    struct CmdLineArgument *argument = CmdLineArgumentParserGet(self,longName);
+    return argument->isActive ? argument->value.list : (struct LinkedList){0};
+}
+
+char *MainGetValueString(struct CmdLineArgumentParser *self,char *longName)
+{
+    struct CmdLineArgument *argument = CmdLineArgumentParserGet(self,longName);
+    return argument->isActive ? argument->value.string : NULL;
+}
+
+
+
+bool MainGetValueFlag(struct CmdLineArgumentParser *self,char *longName)
+{
+    struct CmdLineArgument *argument = CmdLineArgumentParserGet(self,longName);
+    return argument->isActive ? argument->value.flag : false;
 }
 
 
 
 enum C4CTargetArchitecture MainGetArchitecture(char *targetArchiteture)
 {
-    if(ACHIOR_LABS_STRCMP(targetArchiteture,"x86_64"))
+    if(ACHIOR_LABS_STRCMP(targetArchiteture,"x86_64") == 0)
     {
         return C4C_TARGET_ARCH_X86_64;
     }
@@ -178,9 +191,13 @@ enum C4CTargetArchitecture MainGetArchitecture(char *targetArchiteture)
 
 enum C4CTargetOS MainGetOS(char *targetOS)
 {
-    if(ACHIOR_LABS_STRCMP(targetOS,"linux"))
+    if(ACHIOR_LABS_STRCMP(targetOS,"linux") == 0)
     {
         return C4C_TARGET_OS_LINUX;
+    }
+    else if(ACHIOR_LABS_STRCMP(targetOS,"baremetal") == 0)
+    {
+        return C4C_TARGET_OS_BAREMETAL;
     }
 
 
@@ -192,7 +209,7 @@ enum C4CTargetOS MainGetOS(char *targetOS)
 
 enum C4CTargetOS MainGetAssembler(char *targetAssembler)
 {
-    if(ACHIOR_LABS_STRCMP(targetAssembler,"gnuC"))
+    if(ACHIOR_LABS_STRCMP(targetAssembler,"gnuC") == 0)
     {
         return C4C_TARGET_ASSEMBLER_GNUC;
     }
@@ -291,6 +308,8 @@ struct C4CCompiler MainSetUpC4COptions(struct CmdLineArgumentParser *parser,stru
     struct C4COutputOptions output_options;
     C4COutputOptionsNew(&output_options,emit_type,output_file_name);
 
+    struct LinkedList asmFiles = MainGetValueList(parser,"asmfiles");
+    output_options.asmFiles    = asmFiles;
 
     char *targetName = NULL;
     targetName = MainGetValueString(parser,"target");
@@ -346,27 +365,26 @@ static void MainPrintSpaces(int count)
     }
 }
 
-static int MainFormatOption(char *buffer, size_t size, struct CmdLineArgument *arg)
+static int MainFormatOption(char *buffer,size_t size,struct CmdLineArgument *arg)
 {
     int written = 0;
 
-    if(arg->short_name)
+    if(arg->shortName)
     {
-        written += ACHIOR_LABS_SNPRINTF(buffer + written, size - written, "-%s", arg->short_name);
+        written += ACHIOR_LABS_SNPRINTF(buffer + written,size - written,"-%s",arg->shortName);
 
-        if(arg->long_name)
-            written += ACHIOR_LABS_SNPRINTF(buffer + written, size - written, ", ");
+        if(arg->longName)
+            written += ACHIOR_LABS_SNPRINTF(buffer + written,size - written,",");
     }
 
-    if(arg->long_name)
+    if(arg->longName)
     {
-        written += ACHIOR_LABS_SNPRINTF(buffer + written, size - written, "--%s", arg->long_name);
+        written += ACHIOR_LABS_SNPRINTF(buffer + written,size - written,"--%s",arg->longName);
     }
 
-    if(arg->type == CMD_LINE_ARGUMENT_STRING)
+    if(arg->kind == CMD_LINE_ARGUMENT_STRING)
     {
-        written += ACHIOR_LABS_SNPRINTF(buffer + written, size - written, " <%s>",
-                            arg->long_name ? arg->long_name : "value");
+        written += ACHIOR_LABS_SNPRINTF(buffer + written,size - written," <%s>",arg->longName ? arg->longName : "value");
     }
 
     return written;
@@ -377,36 +395,45 @@ static int MainFormatOption(char *buffer, size_t size, struct CmdLineArgument *a
 void MainPrintHelp(struct CmdLineArgumentParser *parser)
 {
     ACHIOR_LABS_PRINTF("c4c version 0.0.0\n");
-    ACHIOR_LABS_PRINTF("%s\n\n", parser->description);
+    ACHIOR_LABS_PRINTF("%s\n\n",parser->description);
 
     ACHIOR_LABS_PRINTF("USAGE\n");
-    ACHIOR_LABS_PRINTF("    %s [OPTIONS] <input>\n\n", parser->name);
+    ACHIOR_LABS_PRINTF("    %s [OPTIONS] <input>\n\n",parser->name);
 
     ACHIOR_LABS_PRINTF("DESCRIPTION\n");
-    ACHIOR_LABS_PRINTF("    %s\n\n", "Compiles C4 source files into target-specific binaries.");
+    ACHIOR_LABS_PRINTF("    %s\n\n","Compiles C4 source files into target-specific binaries.");
 
     ACHIOR_LABS_PRINTF("OPTIONS\n");
 
     // First pass: compute max width
-    int max_width = 0;
-    for(int i = 0; i < parser->arguments.size; i++)
+
+    ACHIOR_LABS_VAR_INIT(u64,maxWidth);
+    ACHIOR_LABS_VAR_INIT(u64,argumentLength);
+    ACHIOR_LABS_PTR_INIT(struct CmdLineArgument,argument);
+    
+    
+    maxWidth       = 0;
+    argumentLength = parser->arguments.len;
+
+    for(int i = 0; i < argumentLength; i++)
     {
         char buffer[256];
-        int len = MainFormatOption(buffer, sizeof(buffer), &parser->arguments.data[i]);
-        if(len > max_width) max_width = len;
+        argument = LinkedListAt(&parser->arguments,i);
+        int len  = MainFormatOption(buffer,sizeof(buffer),argument);
+        if(len > maxWidth) maxWidth = len;
     }
 
     // Second pass: print aligned
-    for(int i = 0; i < parser->arguments.size; i++)
+    for(int i = 0; i < argumentLength; i++)
     {
-        struct CmdLineArgument *arg = &parser->arguments.data[i];
+        argument = LinkedListAt(&parser->arguments,i);
 
         char buffer[256];
-        int len = MainFormatOption(buffer, sizeof(buffer), arg);
+        int len = MainFormatOption(buffer,sizeof(buffer),argument);
 
-        ACHIOR_LABS_PRINTF("    %s", buffer);
-        MainPrintSpaces(max_width - len + 4); // padding
-        ACHIOR_LABS_PRINTF("%s\n", arg->description);
+        ACHIOR_LABS_PRINTF("    %s",buffer);
+        MainPrintSpaces(maxWidth - len + 4); // padding
+        ACHIOR_LABS_PRINTF("%s\n",argument->description);
     }
 
     ACHIOR_LABS_PRINTF("\nEXAMPLES\n\n");
@@ -430,7 +457,7 @@ void MainPrintVersion(struct CmdLineArgumentParser *parser)
         return;
     }
 
-    ACHIOR_LABS_PRINTF("%s version %s\n", parser->name,parser->version);
+    ACHIOR_LABS_PRINTF("%s version %s\n",parser->name,parser->version);
 }
 
 

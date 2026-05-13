@@ -202,13 +202,13 @@ static u64 XXH64(const void *input, u64 len, u64 seed)
 
 /**
  * This function initializes the hashmap
- * It takes one parametere:
+ * It takes 3 parameters:
  * 
- * - capacity -> the number of buckets to be created
+ * - self       -> the memory address of the hashmap
+ * - bump       -> the bump allocator
+ * - capacity   -> the number of buckets to be created
  * 
- * Notice that we use calloc, because we want the bucket to be zerod out
- * so that setting a key at an index found by the hashing algo works well
- * 
+ * If the function always returns true
  */
 bool HashMapNew(struct HashMap *self,u64 capacity,struct BumpAllocator *bump)
 {
@@ -226,10 +226,10 @@ bool HashMapNew(struct HashMap *self,u64 capacity,struct BumpAllocator *bump)
 /**
  * This function inserts a key and value to the hash map
  * It takes four parameters:
- * - map -> a pointer to the map that is being inserted to
- * - key -> the key
- * - len -> the length of the key, we require this for dynamic memory allocation
- * - value -> This is the value of the item being saved in key
+ * - sef    -> a pointer to the map that is being inserted to
+ * - key    -> the key
+ * - len    -> the length of the key, we require this for dynamic memory allocation
+ * - value  -> This is the value of the item being saved in key
  * 
  * Notice that we use void for generics, 
  */
@@ -246,7 +246,8 @@ bool HashMapAdd(struct HashMap *self,const void *key,u64 len,void *value)
     }
 
     node->hash = hash;
-    node->key  = ACHIOR_LABS_ARENA_ALLOC(self->bump,char,len);
+    node->key  = ACHIOR_LABS_ARENA_ALLOC(self->bump,char,len + 2);
+    ACHIOR_LABS_MEMSET(node->key,0,len + 2);
 
     if(ACHIOR_LABS_NULL(node->key))
     {
@@ -268,9 +269,9 @@ bool HashMapAdd(struct HashMap *self,const void *key,u64 len,void *value)
 /**
  * This function returns the value of a given key.
  * It takes three parameters:
- * - map -> the map to search the key from
- * - key -> the key to search for
- * - len -> the length of the key
+ * - self -> the map to search the key from
+ * - key  -> the key to search for
+ * - len  -> the length of the key
  * 
  * we need the length of the key to check against the length store in the 
  * node i.e node->len,
@@ -292,7 +293,7 @@ void *HashMapGet(struct HashMap *self,const void *key,u64 len)
         //DEBUG_PRINT("Being checked against key: ", (char *)key);
         //DEBUG_PRINT("The length of the key is: ",len);
 
-        if (node->keyLength == len && memcmp(node->key, key, len) == 0)
+        if (node->keyLength == len && ACHIOR_LABS_MEMCMP(node->key, key, len) == 0)
         {
             return node->value;
         }
@@ -300,3 +301,8 @@ void *HashMapGet(struct HashMap *self,const void *key,u64 len)
 
     return NULL;
 }
+
+
+
+
+

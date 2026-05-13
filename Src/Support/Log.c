@@ -12,13 +12,14 @@ static const char *log_level_to_string(enum log_level level)
 {
     switch(level)
     {
-        case LOG_LEVEL_TRACE: return "TRACE";
-        case LOG_LEVEL_DEBUG: return "DEBUG";
-        case LOG_LEVEL_INFO:  return "INFO";
-        case LOG_LEVEL_WARN:  return "WARN";
-        case LOG_LEVEL_ERROR: return "ERROR";
-        case LOG_LEVEL_FATAL: return "FATAL";
-        default:              return "UNKNOWN";
+        case LOG_LEVEL_NONE: return "";
+        case LOG_LEVEL_TRACE: return "[TRACE]";
+        case LOG_LEVEL_DEBUG: return "[DEBUG]";
+        case LOG_LEVEL_INFO:  return "[INFO]";
+        case LOG_LEVEL_WARN:  return "[WARN]";
+        case LOG_LEVEL_ERROR: return "[ERROR]";
+        case LOG_LEVEL_FATAL: return "[FATAL]";
+        default:              return "[UNKNOWN]";
     }
 }
 
@@ -133,7 +134,7 @@ static void log_emit_level_prefix(enum log_level level)
         return;
     }
 
-    fputc('[',stdout);
+    
 
     if(g_log_config.use_color)
     {
@@ -147,7 +148,7 @@ static void log_emit_level_prefix(enum log_level level)
         log_reset_color();
     }
 
-    fputs("] ",stdout);
+    
 }
 
 static void log_emit_string(const char *s)
@@ -202,6 +203,24 @@ void log_vwrite(enum log_level level,const char *fmt,va_list args)
         {
             fputc('%',stdout);
             p++;
+            continue;
+        }
+
+        if(*p == '.' && *(p + 1) == '*' && *(p + 2) == 's')
+        {
+            int len = va_arg(args,int);
+            const char *value = va_arg(args,const char *);
+
+            if(value == NULL)
+            {
+                fputs("(null)",stdout);
+            }
+            else if(len > 0)
+            {
+                fwrite(value,1,(size_t)len,stdout);
+            }
+
+            p += 3;
             continue;
         }
 

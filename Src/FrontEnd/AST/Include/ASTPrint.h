@@ -15,7 +15,7 @@ bool ASTPrintNew(struct ASTPrint *self,struct ASTProgram *ast_program,char *outp
 void ASTPrintProgram(struct ASTPrint *self,struct ASTProgram *ast_program);
 void ASTPrintDecl(struct ASTPrint *self,struct ASTDeclaration *ast_decl);
 
-void ASTPrintIdentifier(struct ASTPrint *self,struct Token ident);
+void ASTPrintIdentifier(struct ASTPrint *self,struct Token *ident);
 void ASTPrintFunctionDecl(struct ASTPrint *self,struct ASTFunctionDecl *ast_fn);
 void ASTPrintFunctionArgument(struct ASTPrint *self,struct ASTFunctionArgument *ast_fn_arg);
 

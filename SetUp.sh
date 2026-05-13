@@ -8,6 +8,7 @@ set -e
 
 mkdir -p Target
 mkdir -p Objects
+mkdir -p Objects/FrontEnd/ModuleSystem
 mkdir -p Objects/FrontEnd/Lexer
 mkdir -p Objects/FrontEnd/AST
 mkdir -p Objects/FrontEnd/Parser
@@ -17,7 +18,9 @@ mkdir -p Objects/FrontEnd/LoopLabelling
 mkdir -p Objects/FrontEnd/TypeChecking
 mkdir -p Objects/FrontEnd/Driver
 mkdir -p Objects/CmdLine
+mkdir -p Objects/DiagnosticEngine
 mkdir -p Objects/C4COptions
+mkdir -p Objects/Output
 mkdir -p Objects/Driver
 mkdir -p Objects/Support
 
@@ -27,7 +30,10 @@ mkdir -p Objects/MiddleEnd/C
 mkdir -p Objects/MiddleEnd/Driver
 
 sudo mkdir -p /usr/include/AchiorLabs/C4
+mkdir -p $HOME/opt/cross/include/AchiorLabs/C4
+
 sudo cp Src/Support/Include/Types.h /usr/include/AchiorLabs/C4/Types.h
+cp Src/Support/Include/Types.h $HOME/opt/cross/include/AchiorLabs/C4/Types.h
 
 #exit 0
 
@@ -85,7 +91,3 @@ case "$DISTRO" in
 esac
 echo "[+] Installlation complete!!"
 echo "Have fun using c4 :)"
-
-exit 0
-bash DevTools/ResetSyntaxHighlighting.sh
-bash DevTools/SetSyntaxHighlighting.sh
