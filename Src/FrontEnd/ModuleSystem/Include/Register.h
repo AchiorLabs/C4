@@ -17,6 +17,11 @@ bool ModuleSystemRegisterFunctionDecl(struct ModuleSystem *self,struct Module *m
 void ModuleSystemRegisterFunctionArgument(struct ModuleSystem *self,struct Module *module,struct ASTFunctionArgument *stmt);
 
 
+void ModuleSystemRegisterVariableDecl(struct ModuleSystem *self,struct Module *module,struct ASTVariableDecl *decl);
+
+
+void ModuleSystemRegisterTypeDecl(struct ModuleSystem *self,struct Module *module,struct ASTTypeDecl *decl);
+
 void ModuleSystemRegisterBlockStmt(struct ModuleSystem *self,struct Module *module,struct ASTBlockStmt *block);
 
 void ModuleSystemRegisterStmt(struct ModuleSystem *self,struct Module *module,struct ASTStatement *stmt);

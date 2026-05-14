@@ -149,6 +149,10 @@ enum TokenKind ParserKeywordToToken(struct Parser *self,char *keyword)
 	{
 		return TOKEN_KEYWORD_IMPL;
 	}
+	else if (!strcmp(keyword,"isize"))
+	{
+		return TOKEN_KEYWORD_IMPL;
+	}
 	else if (!strcmp(keyword,"loop"))
 	{
 		return TOKEN_KEYWORD_LOOP;
@@ -217,6 +221,10 @@ enum TokenKind ParserKeywordToToken(struct Parser *self,char *keyword)
 	{
 		return TOKEN_KEYWORD_TRUE;
 	}
+	else if (!strcmp(keyword,"type"))
+	{
+		return TOKEN_KEYWORD_TYPE;
+	}
 	else if (!strcmp(keyword,"while"))
 	{
 		return TOKEN_KEYWORD_WHILE;
@@ -240,6 +248,10 @@ enum TokenKind ParserKeywordToToken(struct Parser *self,char *keyword)
 	else if (!strcmp(keyword,"use"))
 	{
 		return TOKEN_KEYWORD_USE;
+	}
+	else if (!strcmp(keyword,"usize"))
+	{
+		return TOKEN_KEYWORD_USIZE;
 	}
 	else if (!strcmp(keyword,"union"))
 	{
@@ -400,6 +412,10 @@ enum TokenKind ParserSymbolToToken(struct Parser *self,char *keyword)
 	else if (!strcmp(keyword,"."))
 	{
 		return TOKEN_DOT;
+	}
+	else if (!strcmp(keyword,"..."))
+	{
+		return TOKEN_ELIPSIS;
 	}
 	else if (!strcmp(keyword,"@"))
 	{
@@ -895,26 +911,32 @@ struct ASTDeclaration *ParserParseDecl(struct Parser *self)
 		}
 		case TOKEN_KEYWORD_STRUCT:
 		{
-			struct String tmp;
 			decl = ParserParseStructDecl(self);
 			break;
 		}
 		case TOKEN_KEYWORD_UNION:
 		{
-			struct String tmp;
 			decl = ParserParseStructDecl(self);
 			break;
 		}
 		case TOKEN_KEYWORD_IMPL:
 		{
-			struct String tmp;
 			decl = ParserParseImplDecl(self);
 			break;
 		}
 		case TOKEN_KEYWORD_SUM:
 		{
-			struct String tmp;
 			decl = ParserParseSumDecl(self);
+			break;
+		}
+		case TOKEN_KEYWORD_TYPE:
+		{
+			decl = ParserParseTypeDecl(self);
+			break;
+		}
+		case TOKEN_KEYWORD_CONST:
+		{
+			decl = ParserParseVariableDecl(self);
 			break;
 		}
 		case TOKEN_EOF:
@@ -925,6 +947,10 @@ struct ASTDeclaration *ParserParseDecl(struct Parser *self)
 		}
 		default:
 		{
+			if( ParserIsType(self) || ParserParseTryVariableDecl(self) )
+			{
+				decl = ParserParseVariableDecl(self);
+			}
 			//puts(ParserConsume(self)->value.data);
 			break;
 		}
@@ -1277,6 +1303,8 @@ struct ASTFunctionDecl *ParserParseImplMethod(struct Parser *self,struct Token *
 	ACHIOR_LABS_PTR_INIT(struct ASTBlockStmt,block);
 	ACHIOR_LABS_PTR_INIT(struct ASTFunctionAttributes,attributes);
 
+	ACHIOR_LABS_VAR_INIT(bool,hasVariableArguments);
+
 	ACHIOR_LABS_STRUCT_INIT(struct LinkedList,arguments);
 	ACHIOR_LABS_STRUCT_INIT(struct String,tmp);
 
@@ -1321,6 +1349,13 @@ struct ASTFunctionDecl *ParserParseImplMethod(struct Parser *self,struct Token *
 
 	while( !ParserIsToken(self,")",0))
 	{
+		if(ParserIsToken(self,"...",0))
+		{
+			hasVariableArguments = true;
+			ParserConsume(self);
+			break;
+		}
+
 		argument = ParserParseFunctionArgument(self);
 		if( ACHIOR_LABS_NULL(argument))
 		{
@@ -1369,7 +1404,7 @@ struct ASTFunctionDecl *ParserParseImplMethod(struct Parser *self,struct Token *
 
 	attributes = C4MakeASTFunctionAttributes(self->bump,isPublic,isStatic,isNaked,isForeign,foreignAbi,hasLinkName,linkName);
 
-	return C4MakeASTFunctionDecl(self->bump,type,ident,arguments,block,attributes);
+	return C4MakeASTFunctionDecl(self->bump,type,ident,arguments,block,attributes,hasVariableArguments);
 }
 
 
@@ -1572,6 +1607,8 @@ struct ASTDeclaration *ParserParseFunctionDecl(struct Parser *self,bool isPublic
 	ACHIOR_LABS_PTR_INIT(struct ASTType,type);
 	ACHIOR_LABS_PTR_INIT(struct ASTBlockStmt,block);
 
+	ACHIOR_LABS_VAR_INIT(bool,hasVariableArguments);
+
 	ACHIOR_LABS_STRUCT_INIT(struct LinkedList,arguments);
 
 
@@ -1605,6 +1642,14 @@ struct ASTDeclaration *ParserParseFunctionDecl(struct Parser *self,bool isPublic
 
 	while( !ParserIsToken(self,")",0))
 	{
+		if(ParserIsToken(self,"...",0))
+		{
+			hasVariableArguments = true;
+			ParserConsume(self);
+			break;
+		}
+
+
 		argument = ParserParseFunctionArgument(self);
 		ACHIOR_LABS_SYNCHRONIZE(true);
 
@@ -1644,7 +1689,6 @@ struct ASTDeclaration *ParserParseFunctionDecl(struct Parser *self,bool isPublic
 
 	if(ACHIOR_LABS_FALSE(isForeign))
 	{
-
 		if( ParserIsSymbol(self,":",0))
 		{
 			block = ParserParseBlockStmt(self);
@@ -1659,7 +1703,7 @@ struct ASTDeclaration *ParserParseFunctionDecl(struct Parser *self,bool isPublic
 
 
 	attributes = C4MakeASTFunctionAttributes(self->bump,isPublic,isStatic,isNaked,isForeign,foreignAbi,hasLinkName,linkName);
-	decl       = C4MakeASTFunctionDecl(self->bump,type,ident,arguments,block,attributes);
+	decl       = C4MakeASTFunctionDecl(self->bump,type,ident,arguments,block,attributes,hasVariableArguments);
 
 	return C4MakeASTDeclaration(self->bump,AST_DECLARATION_FUNCTION,decl,false);
 }
@@ -1702,6 +1746,82 @@ struct ASTFunctionArgument *ParserParseFunctionArgument(struct Parser *self)
 }
 
 
+
+
+
+
+struct ASTDeclaration *ParserParseVariableDecl(struct Parser *self)
+{
+	ACHIOR_LABS_VAR_INIT(bool,isConstant);
+	ACHIOR_LABS_PTR_INIT(struct ASTVariableDecl,decl);
+
+	if(ParserIsToken(self,"const",0))
+	{
+		ParserExpectKeyword(self,"const","expected const");
+		ACHIOR_LABS_SYNCHRONIZE(false);
+
+		isConstant = true;
+	}
+
+
+	decl = ParserParseVariableDeclaration(self,isConstant);
+
+	return C4MakeASTDeclaration(self->bump,AST_DECLARATION_VARIABLE,decl,false);
+}
+
+
+
+
+
+
+
+struct ASTDeclaration *ParserParseTypeDecl(struct Parser *self)
+{
+	if( ACHIOR_LABS_NULL(self))
+	{
+		return NULL;
+	}
+
+	ACHIOR_LABS_PTR_INIT(struct ASTType,type);
+	ACHIOR_LABS_PTR_INIT(struct Token,ident);
+	ACHIOR_LABS_PTR_INIT(struct ASTTypeDecl,decl);
+
+	ParserExpectKeyword(self,"type","expected type");
+	ACHIOR_LABS_SYNCHRONIZE(true);
+
+
+	if( ParserIsIdentifier(self))
+	{
+		ident = ParserConsume(self);
+	}
+	else
+	{
+		ParserFatal(self,ParserPeek(self,0),"expected an identifier after type",NULL,NULL,NULL,NULL);
+		ACHIOR_LABS_SYNCHRONIZE(true);
+	}
+
+	ParserExpectSymbol(self,"=","expected =");
+	ACHIOR_LABS_SYNCHRONIZE(true);
+
+	type = ParserParseType(self);
+
+	if( ACHIOR_LABS_NULL(type))
+	{
+		ACHIOR_LABS_PRINT("null argument type");
+		ACHIOR_LABS_SYNCHRONIZE(true);
+	}
+
+
+	
+
+	decl = C4MakeASTTypeDecl(self->bump,ident,type);
+
+	return C4MakeASTDeclaration(self->bump,AST_DECLARATION_TYPE,decl,false);;
+
+}
+
+
+
 enum ASTDataType ParserGetDataType(struct Parser *self)
 {
 	if( ACHIOR_LABS_NULL(self))
@@ -1741,6 +1861,11 @@ enum ASTDataType ParserGetDataType(struct Parser *self)
 		type = AST_DATA_TYPE_I64;
 		ParserConsume(self);
 	}
+	else if( ParserIsToken(self,"isize",0))
+	{
+		type = AST_DATA_TYPE_ISIZE;
+		ParserConsume(self);
+	}
 	else if( ParserIsToken(self,"u8",0))
 	{
 		type = AST_DATA_TYPE_U8;
@@ -1759,6 +1884,11 @@ enum ASTDataType ParserGetDataType(struct Parser *self)
 	else if( ParserIsToken(self,"u64",0))
 	{
 		type = AST_DATA_TYPE_U64;
+		ParserConsume(self);
+	}
+	else if( ParserIsToken(self,"usize",0))
+	{
+		type = AST_DATA_TYPE_USIZE;
 		ParserConsume(self);
 	}
 	else if( ParserIsToken(self,"str",0))
@@ -2002,11 +2132,16 @@ struct ASTStatement *ParserParseStmt(struct Parser *self)
 			//ParserParseMatchStmt(self);
 			break;
 		}
+		case TOKEN_KEYWORD_CONST:
+		{
+			return ParserParseVariableDeclarationStmt(self);
+			break;
+		}
 		default:
 		{
 			if( ParserIsType(self) || ParserParseTryVariableDecl(self) )
 			{
-				return ParserParseVariableDecl(self);
+				return ParserParseVariableDeclarationStmt(self);
 			}
 			else
 			{
@@ -2346,7 +2481,10 @@ bool ParserParseTryVariableDecl(struct Parser *self)
 }
 
 
-struct ASTStatement *ParserParseVariableDecl(struct Parser *self)
+
+
+
+struct ASTVariableDecl *ParserParseVariableDeclaration(struct Parser *self,bool isConstant)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
@@ -2356,7 +2494,6 @@ struct ASTStatement *ParserParseVariableDecl(struct Parser *self)
 	ACHIOR_LABS_PTR_INIT(struct ASTType,type);
 	ACHIOR_LABS_PTR_INIT(struct Token,ident);
 	ACHIOR_LABS_PTR_INIT(struct ASTVariableDeclInit,init);
-	ACHIOR_LABS_PTR_INIT(struct ASTVariableDecl,stmt);
 
 	type = ParserParseType(self);
 
@@ -2387,10 +2524,32 @@ struct ASTStatement *ParserParseVariableDecl(struct Parser *self)
 	}
 
 
-	stmt = C4MakeASTVariableDecl(self->bump,type,ident,init);
+	return C4MakeASTVariableDecl(self->bump,isConstant,type,ident,init);
+}
+
+
+
+
+struct ASTStatement *ParserParseVariableDeclarationStmt(struct Parser *self)
+{
+	ACHIOR_LABS_VAR_INIT(bool,isConstant);
+	ACHIOR_LABS_PTR_INIT(struct ASTVariableDecl,stmt);
+
+	if(ParserIsToken(self,"const",0))
+	{
+		ParserExpectKeyword(self,"const","expected const");
+		ACHIOR_LABS_SYNCHRONIZE(false);
+
+		isConstant = true;
+	}
+
+
+	stmt = ParserParseVariableDeclaration(self,isConstant);
 
 	return C4MakeASTStatement(self->bump,AST_STATEMENT_VAR_DECL,stmt);
 }
+
+
 
 
 

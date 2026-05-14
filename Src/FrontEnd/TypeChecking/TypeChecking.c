@@ -60,10 +60,12 @@ bool TypeCheckingType(struct TypeChecking *self,struct ASTType *type)
         case AST_DATA_TYPE_I16:
         case AST_DATA_TYPE_I32:
         case AST_DATA_TYPE_I64:
+        case AST_DATA_TYPE_ISIZE:
         case AST_DATA_TYPE_U8:
         case AST_DATA_TYPE_U16:
         case AST_DATA_TYPE_U32:
         case AST_DATA_TYPE_U64:
+        case AST_DATA_TYPE_USIZE:
         {
             return true;
             break;
@@ -158,6 +160,8 @@ bool TypeCheckingBuildLayout(struct TypeChecking *self,struct ASTType *type)
         }
         case AST_DATA_TYPE_I64:
         case AST_DATA_TYPE_U64:
+        case AST_DATA_TYPE_ISIZE:
+        case AST_DATA_TYPE_USIZE:
         {
             size      = 8;
             alignment = 8;
@@ -441,7 +445,7 @@ void TypeCheckingFunctionDecl(struct TypeChecking *self,struct ASTFunctionDecl *
     struct String trueIdent              = ident;
 
     struct ASTFunctionType *functionType = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTFunctionType,1);
-    ASTFunctionTypeNew(functionType,decl->returnType,decl->arguments);
+    ASTFunctionTypeNew(functionType,decl->returnType,decl->arguments,decl->hasVariableArguments);
 
     struct ASTType *type = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ASTType,1);
     ASTTypeNew(type,AST_DATA_TYPE_FUNCTION,functionType);
@@ -1327,7 +1331,7 @@ void TypeCheckingFunctionCallExpr(struct TypeChecking *self,struct ASTFunctionCa
 
     struct ASTFunctionType *functionType = symbol->type->type;
 
-    if(ACHIOR_LABS_NOT_EQUAL(expr->arguments.len,functionType->arguments.len))
+    if( ACHIOR_LABS_FALSE(functionType->hasVariableArguments) && ACHIOR_LABS_NOT_EQUAL(expr->arguments.len,functionType->arguments.len))
     {
         puts(("function called with non-matching[invalid] number of arguments"));
         //exit(3);
@@ -1435,11 +1439,12 @@ void TypeCheckingVariableExpr(struct TypeChecking *self,struct ASTVariableExpr *
     }
 
 
-    struct String ident   = expr->ident->value;
+    struct String ident         = expr->ident->value;
     struct ModuleSymbol *symbol = HashMapGet(&self->symbols,ident.data,ident.size);
 
     if(ACHIOR_LABS_NULL(symbol))
     {
+        puts(ident.data);
         puts("illegal use of an undeclared variable identifier : [error]");
 
         return;

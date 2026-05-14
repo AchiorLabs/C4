@@ -252,11 +252,123 @@ void IdentifierResolutionDeclaration(struct IdentifierResolution *self,struct AS
 			IdentifierResolutionFunctionDecl(self,ASTDECLARATION_GET_DECL(*decl),(struct String){0},identMap);
 			break;
 		}
+		case AST_DECLARATION_VARIABLE:
+		{
+			IdentifierResolutionVariableDecl(self,ASTDECLARATION_GET_DECL(*decl),identMap);
+			break;
+		}
+		case AST_DECLARATION_TYPE:
+		{
+			IdentifierResolutionTypeDecl(self,ASTDECLARATION_GET_DECL(*decl),identMap);
+			break;
+		}
 		default:
 		{
 			break;
 		}
 	}
+}
+
+
+
+void IdentifierResolutionTypeDecl(struct IdentifierResolution *self,struct ASTTypeDecl *decl,struct HashMap *identMap)
+{
+    if( ACHIOR_LABS_NULL(decl))
+    {
+        return;
+    }
+
+    ACHIOR_LABS_PTR_INIT(struct IdentifierEntry,entry);
+    ACHIOR_LABS_PTR_INIT(char,ident);
+    ACHIOR_LABS_VAR_INIT(u64,identLength);
+
+
+    ACHIOR_LABS_STRUCT_INIT(struct String,moduleIdent);
+
+    IdentifierResolutionType(self,decl->type);
+
+    StringNew(&moduleIdent,20,self->bump);
+
+    StringPushBack(&moduleIdent,self->moduleName);
+    StringPushBack(&moduleIdent,TOKEN_GET_VALUE_DATA(*(decl->ident)));
+
+    moduleIdent = StringReplacePathSeparators(moduleIdent);
+    ident       = TOKEN_GET_VALUE_DATA(*(decl->ident));
+    identLength = ACHIOR_LABS_STRLEN(ident);
+    entry       = HashMapGet(&self->structMap,ident,identLength);
+
+    TOKEN_SET_VALUE(*(decl->ident),moduleIdent);
+
+    if(ACHIOR_LABS_NOT_NULL(entry))
+    {
+        if(ACHIOR_LABS_TRUE(entry->isCurrent))
+        {
+            IdentifierResolutionFatal(self,decl->ident,"type alias redeclared ",NULL,"assign a different name to your type alias"," newTypeAliasName",NULL);
+            return;
+        }
+        
+    }
+
+    entry = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct IdentifierEntry,1);
+    IdentifierEntryNew(entry,true,true,IDENTIFIER_AGGREGATE_TYPE_ALIAS,TOKEN_GET_VALUE(*(decl->ident)));
+    
+    HashMapAdd(&self->structMap,ident,identLength,entry);
+    HashMapAdd(&self->program->identMap,ident,identLength,entry);
+}
+
+
+void IdentifierResolutionVariableDecl(struct IdentifierResolution *self,struct ASTVariableDecl *decl,struct HashMap *identMap)
+{
+    if( ACHIOR_LABS_NULL(decl))
+    {
+        return;
+    }
+
+    ACHIOR_LABS_PTR_INIT(struct IdentifierEntry,entry);
+    ACHIOR_LABS_PTR_INIT(char,ident);
+    ACHIOR_LABS_VAR_INIT(u64,identLength);
+
+
+    ACHIOR_LABS_STRUCT_INIT(struct String,moduleIdent);
+
+    
+    StringNew(&moduleIdent,20,self->bump);
+
+    StringPushBack(&moduleIdent,self->moduleName);
+    StringPushBack(&moduleIdent,TOKEN_GET_VALUE_DATA(*(decl->ident)));
+
+    moduleIdent = StringReplacePathSeparators(moduleIdent);
+    ident       = TOKEN_GET_VALUE_DATA(*(decl->ident));
+    identLength = ACHIOR_LABS_STRLEN(ident);
+    entry       = HashMapGet(identMap,ident,identLength);
+
+    TOKEN_SET_VALUE(*(decl->ident),moduleIdent);
+
+
+
+
+    IdentifierResolutionType(self,decl->type);
+
+    if(ACHIOR_LABS_NOT_NULL(entry))
+    {
+        if(ACHIOR_LABS_TRUE(entry->isCurrent))
+        {
+            IdentifierResolutionFatal(self,decl->ident,"variable identifier redeclared ",NULL,"assign a different name to your variable declaration"," newVariableName",NULL);
+            return;
+        }
+        
+    }
+
+    entry = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct IdentifierEntry,1);
+    IdentifierEntryNew(entry,true,true,IDENTIFIER_AGGREGATE_NONE,TOKEN_GET_VALUE(*(decl->ident)));
+    
+    HashMapAdd(identMap,ident,identLength,entry);
+    HashMapAdd(&self->program->identMap,ident,identLength,entry);
+
+    if(ACHIOR_LABS_NOT_NULL(decl->init))
+    {
+        IdentifierResolutionVariableDeclInit(self,decl->init,identMap);
+    }
 }
 
 
@@ -559,6 +671,12 @@ void IdentifierResolutionType(struct IdentifierResolution *self,struct ASTType *
 
             if(ACHIOR_LABS_NULL(entry))
             {
+                return;
+            }
+
+            if(entry->aggregateKind == IDENTIFIER_AGGREGATE_TYPE_ALIAS)
+            {
+                token->value = entry->ident;
                 return;
             }
 
@@ -1504,8 +1622,6 @@ void IdentifierResolutionVariableExpr(struct IdentifierResolution *self,struct A
 
     if(ACHIOR_LABS_NULL(entry))
     {
-        puts("illegal use of an undeclared variable identifier : [error] => IR");
-        puts(ident);
         IdentifierResolutionFatal(self,expr->ident,"illegal use of an undeclared variable identifier  ",NULL,"variable must be declared before use",NULL,NULL);
         return;
     }

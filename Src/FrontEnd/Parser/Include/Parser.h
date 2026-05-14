@@ -155,6 +155,9 @@ struct ASTDeclaration *ParserParseFunctionDecl(struct Parser *self,bool isPublic
 struct ASTFunctionArgument *ParserParseFunctionArgument(struct Parser *self);
 
 
+struct ASTDeclaration *ParserParseVariableDecl(struct Parser *self);
+
+struct ASTDeclaration *ParserParseTypeDecl(struct Parser *self);
 
 enum ASTDataType ParserGetDataType(struct Parser *self);
 
@@ -179,7 +182,10 @@ bool ParserParseTryVariableDecl(struct Parser *self);
 
 
 
-struct ASTStatement *ParserParseVariableDecl(struct Parser *self);
+struct ASTStatement *ParserParseVariableDeclarationStmt(struct Parser *self);
+
+
+struct ASTVariableDecl *ParserParseVariableDeclaration(struct Parser *self,bool isConstant);
 
 
 

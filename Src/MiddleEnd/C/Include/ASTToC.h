@@ -51,6 +51,7 @@ void ASTToCFunctionDecl(struct ASTToC *self,struct ASTFunctionDecl *function);
 
 void ASTToCFunctionArgument(struct ASTToC *self,struct ASTFunctionArgument *argument);
 
+void ASTToCVariableDecl(struct ASTToC *self,struct ASTVariableDecl *stmt);
 
 
 
@@ -74,7 +75,7 @@ void ASTToCIfStmt(struct ASTToC *self,struct ASTIfStmt *stmt,char *tab);
 
 void ASTToCVariableDeclStmt(struct ASTToC *self,struct ASTVariableDecl *stmt,char *tab);
 
-void ASTToCVariableDeclInit(struct ASTToC *self,struct ASTVariableDeclInit *init);
+void ASTToCVariableDeclInit(struct ASTToC *self,struct ASTVariableDeclInit *init,bool cFile);
 
 void ASTToCExpressionStmt(struct ASTToC *self,struct ASTExpression *stmt,char *tab);
 

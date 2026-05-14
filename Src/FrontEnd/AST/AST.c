@@ -58,15 +58,16 @@ bool ASTAggregateTypeNew(struct ASTAggregateType *self,struct LinkedList path)
 }
 
 
-bool ASTFunctionTypeNew(struct ASTFunctionType *self,struct ASTType *returnType,struct LinkedList arguments)
+bool ASTFunctionTypeNew(struct ASTFunctionType *self,struct ASTType *returnType,struct LinkedList arguments,bool hasVariableArguments)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
 		return false;
 	}
 
-	self->returnType = returnType;
-	self->arguments   = arguments;
+	self->returnType           = returnType;
+	self->arguments            = arguments;
+	self->hasVariableArguments = hasVariableArguments;
 
 	return true;
 }
@@ -281,6 +282,21 @@ bool ASTSumDeclNew(struct ASTSumDecl *self,struct Token *ident,struct LinkedList
 
 
 
+bool ASTTypeDeclNew(struct ASTTypeDecl *self,struct Token *ident,struct ASTType *type)
+{
+	if( ACHIOR_LABS_NULL(self))
+	{
+		return false;
+	}
+
+	self->ident = ident;
+	self->type  = type;
+
+	return true;
+}
+
+
+
 bool ASTFunctionAttributesNew(struct ASTFunctionAttributes *self,bool isPublic,bool isStatic,bool isNaked,bool isForeign,struct String foreignAbi,bool hasLinkName,struct String linkName)
 {
 	if( ACHIOR_LABS_NULL(self))
@@ -316,18 +332,19 @@ bool ASTFunctionArgumentNew(struct ASTFunctionArgument *self,struct ASTType *typ
 
 
 
-bool ASTFunctionDeclNew(struct ASTFunctionDecl *self,struct ASTType *returnType,struct Token *ident,struct LinkedList arguments,struct ASTBlockStmt *block,struct ASTFunctionAttributes *attributes)
+bool ASTFunctionDeclNew(struct ASTFunctionDecl *self,struct ASTType *returnType,struct Token *ident,struct LinkedList arguments,struct ASTBlockStmt *block,struct ASTFunctionAttributes *attributes,bool hasVariableArguments)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
 		return false;
 	}
 
-	self->returnType = returnType;
-	self->ident      = ident;
-	self->arguments  = arguments;
-	self->block      = block;
-	self->attributes = attributes;
+	self->returnType           = returnType;
+	self->ident                = ident;
+	self->arguments            = arguments;
+	self->block                = block;
+	self->attributes           = attributes;
+	self->hasVariableArguments = hasVariableArguments;
 
 	return true;
 }
@@ -471,16 +488,17 @@ bool ASTIfStmtNew(struct ASTIfStmt *self,struct ASTExpression *expr,struct ASTBl
 
 
 
-bool ASTVariableDeclNew(struct ASTVariableDecl *self,struct ASTType *type,struct Token *ident,struct ASTVariableDeclInit *init)
+bool ASTVariableDeclNew(struct ASTVariableDecl *self,bool isConstant,struct ASTType *type,struct Token *ident,struct ASTVariableDeclInit *init)
 {
 	if( ACHIOR_LABS_NULL(self))
 	{
 		return false;
 	}
 
-	self->type  = type;
-	self->ident = ident;
-	self->init  = init;
+	self->isConstant = isConstant;
+	self->type       = type;
+	self->ident      = ident;
+	self->init       = init;
 
 	return true;
 }
@@ -1042,11 +1060,11 @@ struct ASTForeignDecl *C4MakeASTForeignDecl(struct BumpAllocator *bump,struct Li
 
 
 
-struct ASTFunctionDecl *C4MakeASTFunctionDecl(struct BumpAllocator *bump,struct ASTType *returnType,struct Token *ident,struct LinkedList arguments,struct ASTBlockStmt *block,struct ASTFunctionAttributes *attributes)
+struct ASTFunctionDecl *C4MakeASTFunctionDecl(struct BumpAllocator *bump,struct ASTType *returnType,struct Token *ident,struct LinkedList arguments,struct ASTBlockStmt *block,struct ASTFunctionAttributes *attributes,bool hasVariableArguments)
 {
     struct ASTFunctionDecl *node = ACHIOR_LABS_ARENA_ALLOC(bump,struct ASTFunctionDecl,1);
 
-    ASTFunctionDeclNew(node,returnType,ident,arguments,block,attributes);
+    ASTFunctionDeclNew(node,returnType,ident,arguments,block,attributes,hasVariableArguments);
     return node;
 }
 
@@ -1071,7 +1089,13 @@ struct ASTFunctionAttributes *C4MakeASTFunctionAttributes(struct BumpAllocator *
     return node;
 }
 
+struct ASTTypeDecl *C4MakeASTTypeDecl(struct BumpAllocator *bump,struct Token *ident,struct ASTType *type)
+{
+	struct ASTTypeDecl *node = ACHIOR_LABS_ARENA_ALLOC(bump,struct ASTTypeDecl,1);
+	ASTTypeDeclNew(node,ident,type);
 
+	return node;
+}
 
 
 struct ASTType *C4MakeASTType(struct BumpAllocator *bump,enum ASTDataType data_type,void *type)
@@ -1107,11 +1131,11 @@ struct ASTArrayType *C4MakeASTArrayType(struct BumpAllocator *bump,struct ASTTyp
 
 
 
-struct ASTFunctionType *C4MakeASTFunctionType(struct BumpAllocator *bump,struct ASTType *returnType,struct LinkedList arguments)
+struct ASTFunctionType *C4MakeASTFunctionType(struct BumpAllocator *bump,struct ASTType *returnType,struct LinkedList arguments,bool hasVariableArguments)
 {
     struct ASTFunctionType *node = ACHIOR_LABS_ARENA_ALLOC(bump,struct ASTFunctionType,1);
 
-    ASTFunctionTypeNew(node,returnType,arguments);
+    ASTFunctionTypeNew(node,returnType,arguments,hasVariableArguments);
     return node;
 }
 
@@ -1180,11 +1204,11 @@ struct ASTReturnStmt *C4MakeASTReturnStmt(struct BumpAllocator *bump,struct ASTE
 
 
 
-struct ASTVariableDecl *C4MakeASTVariableDecl(struct BumpAllocator *bump,struct ASTType *type,struct Token *ident,struct ASTVariableDeclInit *init)
+struct ASTVariableDecl *C4MakeASTVariableDecl(struct BumpAllocator *bump,bool isConstant,struct ASTType *type,struct Token *ident,struct ASTVariableDeclInit *init)
 {
     struct ASTVariableDecl *node = ACHIOR_LABS_ARENA_ALLOC(bump,struct ASTVariableDecl,1);
 
-    ASTVariableDeclNew(node,type,ident,init);
+    ASTVariableDeclNew(node,isConstant,type,ident,init);
     return node;
 }
 

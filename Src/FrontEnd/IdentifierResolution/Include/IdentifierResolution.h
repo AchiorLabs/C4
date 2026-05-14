@@ -10,6 +10,7 @@ enum IdentifierAggregateKind
     IDENTIFIER_AGGREGATE_ENUM,
     IDENTIFIER_AGGREGATE_UNION,
     IDENTIFIER_AGGREGATE_SUM,
+    IDENTIFIER_AGGREGATE_TYPE_ALIAS,
 };
 
 struct IdentifierEntry
@@ -62,6 +63,9 @@ void IdentifierResolutionSumVariants(struct IdentifierResolution *self,struct Li
 void IdentifierResolutionFunctionDecl(struct IdentifierResolution *self,struct ASTFunctionDecl *function,struct String structIdent,struct HashMap *identMap);
 void IdentifierResolutionFunctionArgument(struct IdentifierResolution *self,struct ASTFunctionArgument *argument,struct HashMap *identMap);
 
+void IdentifierResolutionVariableDecl(struct IdentifierResolution *self,struct ASTVariableDecl *decl,struct HashMap *identMap);
+
+void IdentifierResolutionTypeDecl(struct IdentifierResolution *self,struct ASTTypeDecl *decl,struct HashMap *identMap);
 
 void IdentifierResolutionBlockStmt(struct IdentifierResolution *self,struct ASTBlockStmt *block,struct HashMap *identMap);
 
