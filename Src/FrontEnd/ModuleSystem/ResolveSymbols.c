@@ -48,6 +48,20 @@ bool ModuleSystemResolveSymbolType(struct ModuleSystem *self,struct Module *modu
             struct Module *currentModule = module;
             struct ModuleSymbol *symbol  = NULL;
 
+            // check if it is a type alias
+
+            symbol = HashMapGet(&module->symbols,token->value.data,token->value.size);
+
+            if(ACHIOR_LABS_NOT_NULL(symbol) && ACHIOR_LABS_EQUAL(symbol->kind,MODULE_SYMBOL_TYPE_ALIAS))
+            {
+                type->dataType   = symbol->type->dataType;
+                type->isFunction = symbol->type->isFunction;
+                type->layout     = symbol->type->layout;
+                type->type       = symbol->type->type;
+
+                return true;
+            }
+
             // check if token is an import alias
             struct ModuleImport *import = HashMapGet(&module->imports,TOKEN_GET_VALUE_DATA(*token),TOKEN_GET_VALUE_SIZE(*token));
 
@@ -100,6 +114,14 @@ bool ModuleSystemResolveSymbolType(struct ModuleSystem *self,struct Module *modu
                 ASTTYPE_SET_DATATYPE(*type,AST_DATA_TYPE_ENUM);
                 ASTTYPE_SET_TYPE(*type,structType);
             }
+            else if(ACHIOR_LABS_EQUAL(symbol->kind,MODULE_SYMBOL_TYPE_ALIAS))
+            {
+                type->dataType   = symbol->type->dataType;
+                type->isFunction = symbol->type->isFunction;
+                type->layout     = symbol->type->layout;
+                type->type       = symbol->type->type;
+
+            }
 
             return true;
         }
@@ -150,12 +172,72 @@ bool ModuleSystemResolveSymbolIdentifiers(struct ModuleSystem *self,struct Modul
                 ModuleSystemResolveSymbolEnumDecl(self,module,decl->decl);
                 break;
             }
+            case AST_DECLARATION_VARIABLE:
+            {
+                ModuleSystemResolveSymbolVariableDecl(self,module,decl->decl);
+                break;
+            }
             default:
             {
                 break;
             }
         }
     }
+
+    return true;
+}
+
+
+
+
+bool ModuleSystemResolveSymbolVariableDecl(struct ModuleSystem *self,struct Module *module,struct ASTVariableDecl *decl)
+{
+    if (ACHIOR_LABS_NULL(self) || ACHIOR_LABS_NULL(module) || ACHIOR_LABS_NULL(decl))
+    {
+        return false;
+    }
+
+    // 1. resolve the type
+    if (!ModuleSystemResolveSymbolType(self,module,ASTVARIABLEDECL_GET_TYPE(*decl)))
+    {
+        return false;
+    }
+
+    
+
+    // 2. resolve initializer (if exists)
+
+    if (decl->init != NULL)
+    {
+        struct ASTVariableDeclInit *init = decl->init;
+
+        switch (init->kind)
+        {
+            case AST_VAR_DECL_INIT_SINGLE_INIT:
+            {
+                struct ASTVariableDeclSingleInit *single =init->init;
+
+                ModuleSystemResolveSymbolExpression(self,module,single->expr);
+
+                break;
+            }
+
+            case AST_VAR_DECL_INIT_ARRAY_INIT:
+            {
+                struct ASTVariableDeclArrayInit *array = init->init;
+
+                for (u64 i = 0; i < array->elements.len; i++)
+                {
+                    struct ASTVariableDeclInit *elem = LinkedListAt(&array->elements,i);
+
+                    // recursive (arrays can be nested)
+                }
+
+                break;
+            }
+        }
+    }
+
 
     return true;
 }

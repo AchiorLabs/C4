@@ -15,6 +15,8 @@ bool ModuleSystemResolveSymbolStructDecl(struct ModuleSystem *self,struct Module
 bool ModuleSystemResolveSymbolImplDecl(struct ModuleSystem *self,struct Module *module,struct ASTImplDecl *decl);
 
 
+bool ModuleSystemResolveSymbolVariableDecl(struct ModuleSystem *self,struct Module *module,struct ASTVariableDecl *decl);
+
 bool ModuleSystemResolveSymbolFunctionArgument(struct ModuleSystem *self,struct Module *module,struct ASTFunctionArgument *stmt);
 
 bool ModuleSystemResolveSymbolBlockStmt(struct ModuleSystem *self,struct Module *module,struct ASTBlockStmt *block);

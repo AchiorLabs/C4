@@ -87,6 +87,16 @@ bool ModuleSystemRegisterSymbols(struct ModuleSystem *self,struct Module *module
                 ModuleSystemRegisterImplDecl(self,module,ASTDECLARATION_GET_DECL(*decl));
                 break;
             }
+            case AST_DECLARATION_VARIABLE:
+            {
+                ModuleSystemRegisterVariableDecl(self,module,ASTDECLARATION_GET_DECL(*decl));
+                break;
+            }
+            case AST_DECLARATION_TYPE:
+            {
+                ModuleSystemRegisterTypeDecl(self,module,ASTDECLARATION_GET_DECL(*decl));
+                break;
+            }
         }
 
     }
@@ -94,6 +104,92 @@ bool ModuleSystemRegisterSymbols(struct ModuleSystem *self,struct Module *module
         
 
     return true;
+}
+
+
+
+
+void ModuleSystemRegisterTypeDecl(struct ModuleSystem *self,struct Module *module,struct ASTTypeDecl *decl)
+{
+    if( ACHIOR_LABS_NULL(decl))
+    {
+        return;
+    }
+
+
+    enum ModuleSymbolKind kind;
+    struct Token *name;
+
+    kind = MODULE_SYMBOL_TYPE_ALIAS;
+    name = decl->ident;
+
+    /*
+    duplicate definition check
+    */
+
+    struct ModuleSymbol *existing = HashMapGet(&module->symbols,TOKEN_GET_VALUE_DATA(*name),TOKEN_GET_VALUE_SIZE(*name));
+
+    if (ACHIOR_LABS_NOT_NULL(existing))
+    {
+        ACHIOR_LABS_PTR_INIT(char,buf);
+        buf = ACHIOR_LABS_ARENA_ALLOC(self->bump,char,1024);
+
+        ACHIOR_LABS_SNPRINTF(buf,1024,"duplicate symbol in module %s ",module->moduleName);
+
+        ModuleSystemFatal(self,decl->ident,buf,NULL,NULL,NULL,NULL);
+    }
+
+    struct ModuleSymbol *symbol = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ModuleSymbol,1);
+
+    bool isPublic = false;
+
+    ModuleSymbolNew(symbol,kind,name,decl,isPublic,module);
+    symbol->type = decl->type;
+
+
+    HashMapAdd(&module->symbols,TOKEN_GET_VALUE_DATA(*name),TOKEN_GET_VALUE_SIZE(*name),symbol);
+}
+
+
+
+
+void ModuleSystemRegisterVariableDecl(struct ModuleSystem *self,struct Module *module,struct ASTVariableDecl *decl)
+{
+    if( ACHIOR_LABS_NULL(decl))
+    {
+        return;
+    }
+
+
+    enum ModuleSymbolKind kind;
+    struct Token *name;
+
+    kind = MODULE_SYMBOL_VARIABLE;
+    name = decl->ident;
+
+    /*
+    duplicate definition check
+    */
+    struct ModuleSymbol *existing = HashMapGet(&module->symbols,TOKEN_GET_VALUE_DATA(*name),TOKEN_GET_VALUE_SIZE(*name));
+
+    if (ACHIOR_LABS_NOT_NULL(existing))
+    {
+        ACHIOR_LABS_PTR_INIT(char,buf);
+        buf = ACHIOR_LABS_ARENA_ALLOC(self->bump,char,1024);
+
+        ACHIOR_LABS_SNPRINTF(buf,1024,"duplicate  symbol in module %s ",module->moduleName);
+
+        ModuleSystemFatal(self,decl->ident,buf,NULL,NULL,NULL,NULL);
+    }
+
+    struct ModuleSymbol *symbol = ACHIOR_LABS_ARENA_ALLOC(self->bump,struct ModuleSymbol,1);
+
+    bool isPublic = false;
+
+    ModuleSymbolNew(symbol,kind,name,decl,isPublic,module);
+
+
+    HashMapAdd(&module->symbols,TOKEN_GET_VALUE_DATA(*name),TOKEN_GET_VALUE_SIZE(*name),symbol);
 }
 
 

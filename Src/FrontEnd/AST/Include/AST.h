@@ -49,8 +49,10 @@ enum ASTDeclarationKind
 	AST_DECLARATION_UNION,
 	AST_DECLARATION_IMPL,
 	AST_DECLARATION_SUM,
+	AST_DECLARATION_TYPE,
 	AST_DECLARATION_FUNCTION,
 	AST_DECLARATION_FOREIGN,
+	AST_DECLARATION_VARIABLE,
 };
 
 
@@ -112,10 +114,12 @@ enum ASTDataType
 	AST_DATA_TYPE_I16,
 	AST_DATA_TYPE_I32,
 	AST_DATA_TYPE_I64,
+	AST_DATA_TYPE_ISIZE,
 	AST_DATA_TYPE_U8,
 	AST_DATA_TYPE_U16,
 	AST_DATA_TYPE_U32,
 	AST_DATA_TYPE_U64,
+	AST_DATA_TYPE_USIZE,
 	AST_DATA_TYPE_STRING,
 	AST_DATA_TYPE_POINTER,
 	AST_DATA_TYPE_ARRAY,
@@ -238,6 +242,7 @@ struct ASTFunctionType
 {
 	struct ASTType *returnType;
 	struct LinkedList arguments;
+	bool hasVariableArguments;
 };
 
 // Accessor macros for reading ASTFunctionType fields without direct struct access
@@ -264,7 +269,7 @@ struct ASTFunctionType
 #define ASTFUNCTIONTYPE_SET_ARGUMENTS(astFunctionType,c4value) (astFunctionType).arguments = (c4value)
 #endif
 
-bool ASTFunctionTypeNew(struct ASTFunctionType *self,struct ASTType *returnType,struct LinkedList arguments);
+bool ASTFunctionTypeNew(struct ASTFunctionType *self,struct ASTType *returnType,struct LinkedList arguments,bool hasVariableArguments);
 
 
 
@@ -809,6 +814,17 @@ struct ASTSumDecl
 bool ASTSumDeclNew(struct ASTSumDecl *self,struct Token *ident,struct LinkedList variants);
 
 
+struct ASTTypeDecl
+{
+	struct Token *ident;
+	struct ASTType *type;
+};
+
+
+bool ASTTypeDeclNew(struct ASTTypeDecl *self,struct Token *ident,struct ASTType *type);
+
+
+
 struct ASTFunctionAttributes
 {
     bool isPublic;
@@ -958,6 +974,7 @@ struct ASTFunctionDecl
 	struct LinkedList arguments;
 	struct ASTBlockStmt *block;
 	struct ASTFunctionAttributes *attributes;
+	bool hasVariableArguments;
 	struct ModuleSymbol *symbol;
 };
 
@@ -1028,7 +1045,7 @@ struct ASTFunctionDecl
 
 
 
-bool ASTFunctionDeclNew(struct ASTFunctionDecl *self,struct ASTType *returnType,struct Token *ident,struct LinkedList arguments,struct ASTBlockStmt *block,struct ASTFunctionAttributes *attributes);
+bool ASTFunctionDeclNew(struct ASTFunctionDecl *self,struct ASTType *returnType,struct Token *ident,struct LinkedList arguments,struct ASTBlockStmt *block,struct ASTFunctionAttributes *attributes,bool hasVariableArguments);
 
 struct ASTForeignDecl
 {
@@ -1370,6 +1387,7 @@ bool ASTIfStmtNew(struct ASTIfStmt *self,struct ASTExpression *expr,struct ASTBl
 
 struct ASTVariableDecl
 {
+	bool isConstant;
 	struct ASTType *type;
 	struct Token *ident;
 	struct ASTVariableDeclInit *init;
@@ -1411,7 +1429,7 @@ struct ASTVariableDecl
 #endif
 
 
-bool ASTVariableDeclNew(struct ASTVariableDecl *self,struct ASTType *type,struct Token *ident,struct ASTVariableDeclInit *init);
+bool ASTVariableDeclNew(struct ASTVariableDecl *self,bool isConstant,struct ASTType *type,struct Token *ident,struct ASTVariableDeclInit *init);
 
 enum ASTVariableDeclInitKind
 {
@@ -2956,9 +2974,11 @@ struct ASTForeignDecl *C4MakeASTForeignDecl(struct BumpAllocator *bump,struct Li
 
 
 
-struct ASTFunctionDecl *C4MakeASTFunctionDecl(struct BumpAllocator *bump,struct ASTType *returnType,struct Token *ident,struct LinkedList arguments,struct ASTBlockStmt *block,struct ASTFunctionAttributes *attributes);
+struct ASTFunctionDecl *C4MakeASTFunctionDecl(struct BumpAllocator *bump,struct ASTType *returnType,struct Token *ident,struct LinkedList arguments,struct ASTBlockStmt *block,struct ASTFunctionAttributes *attributes,bool hasVariableArguments);
 
 
+
+struct ASTTypeDecl *C4MakeASTTypeDecl(struct BumpAllocator *bump,struct Token *ident,struct ASTType *type);
 
 
 struct ASTFunctionArgument *C4MakeASTFunctionArgument(struct BumpAllocator *bump,struct ASTType *type,struct Token *ident);
@@ -2982,7 +3002,7 @@ struct ASTArrayType *C4MakeASTArrayType(struct BumpAllocator *bump,struct ASTTyp
 
 
 
-struct ASTFunctionType *C4MakeASTFunctionType(struct BumpAllocator *bump,struct ASTType *returnType,struct LinkedList arguments);
+struct ASTFunctionType *C4MakeASTFunctionType(struct BumpAllocator *bump,struct ASTType *returnType,struct LinkedList arguments,bool hasVariableArguments);
 
 
 
@@ -3008,7 +3028,7 @@ struct ASTReturnStmt *C4MakeASTReturnStmt(struct BumpAllocator *bump,struct ASTE
 
 
 
-struct ASTVariableDecl *C4MakeASTVariableDecl(struct BumpAllocator *bump,struct ASTType *type,struct Token *ident,struct ASTVariableDeclInit *init);
+struct ASTVariableDecl *C4MakeASTVariableDecl(struct BumpAllocator *bump,bool isConstant,struct ASTType *type,struct Token *ident,struct ASTVariableDeclInit *init);
 
 
 

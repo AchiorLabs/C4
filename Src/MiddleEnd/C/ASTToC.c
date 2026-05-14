@@ -170,6 +170,11 @@ void ASTToCDecl(struct ASTToC *self,struct ASTDeclaration *decl)
 			ASTToCFunctionDecl(self,ASTDECLARATION_GET_DECL(*decl));
 			break;
 		}
+		case AST_DECLARATION_VARIABLE:
+		{
+			ASTToCVariableDecl(self,ASTDECLARATION_GET_DECL(*decl));
+			break;
+		}
 		default:
 		{
 			break;
@@ -190,6 +195,69 @@ void ASTToCIdentifier(struct ASTToC *self,struct Token *ident,bool cFile)
         ACHIOR_LABS_FPRINTF(self->hFileHandle,"%s",TOKEN_GET_VALUE_DATA(*ident));
     }
 }
+
+
+
+
+void ASTToCVariableDecl(struct ASTToC *self,struct ASTVariableDecl *stmt)
+{
+    if( ACHIOR_LABS_NULL(stmt))
+    {
+        return;
+    }
+
+    ACHIOR_LABS_STRUCT_INIT(struct LinkedList,arrayBuffer);
+    ACHIOR_LABS_VAR_INIT(u64,arrayBufferLength);
+    ACHIOR_LABS_PTR_INIT(struct ASTExpression,size);
+    
+    LinkedListNew(&arrayBuffer,self->bump);
+
+    ACHIOR_LABS_FPRINTF(self->hFileHandle,"extern ");
+
+    if(ACHIOR_LABS_TRUE(stmt->isConstant))
+    {
+        ACHIOR_LABS_FPRINTF(self->cFileHandle,"const ");
+        ACHIOR_LABS_FPRINTF(self->hFileHandle,"const ");
+    }
+
+
+    ASTToCType(self,stmt->type,&arrayBuffer,true);
+    ASTToCType(self,stmt->type,&arrayBuffer,false);
+
+    ASTToCIdentifier(self,stmt->ident,true);
+    ASTToCIdentifier(self,stmt->ident,false);
+
+
+    arrayBufferLength = arrayBuffer.len;
+
+    for(u64 i = 0; i < arrayBufferLength; i++)
+    {
+        ACHIOR_LABS_FPRINTF(self->cFileHandle,"[");
+        ACHIOR_LABS_FPRINTF(self->hFileHandle,"[");
+
+        size = LinkedListAt(&arrayBuffer,i);
+
+        ASTToCExpression(self,size,true);
+        ASTToCExpression(self,size,false);
+
+        ACHIOR_LABS_FPRINTF(self->cFileHandle,"]");
+        ACHIOR_LABS_FPRINTF(self->hFileHandle,"]");
+    }
+
+
+    if(ACHIOR_LABS_NOT_NULL(stmt->init))
+    {
+        ACHIOR_LABS_FPRINTF(self->cFileHandle," = ");
+        //ACHIOR_LABS_FPRINTF(self->hFileHandle," = ");
+
+        ASTToCVariableDeclInit(self,stmt->init,true);
+        //ASTToCVariableDeclInit(self,stmt->init,false);
+    }
+
+    ACHIOR_LABS_FPRINTF(self->cFileHandle,";\n");
+    ACHIOR_LABS_FPRINTF(self->hFileHandle,";\n");
+}
+
 
 
 
@@ -569,6 +637,20 @@ void ASTToCFunctionDecl(struct ASTToC *self,struct ASTFunctionDecl *decl)
         }
     }
 
+    if(ACHIOR_LABS_TRUE(decl->hasVariableArguments))
+    {
+        if(ACHIOR_LABS_GREATER(decl->arguments.len,0))
+        {
+            ACHIOR_LABS_FPRINTF(self->cFileHandle,",...");
+            ACHIOR_LABS_FPRINTF(self->hFileHandle,",...");
+        }
+        else
+        {
+            ACHIOR_LABS_FPRINTF(self->cFileHandle,"...");
+            ACHIOR_LABS_FPRINTF(self->hFileHandle,"...");   
+        }
+    }
+
     ACHIOR_LABS_FPRINTF(self->cFileHandle,")");
     ACHIOR_LABS_FPRINTF(self->hFileHandle,");\n\n");
 
@@ -672,6 +754,11 @@ void ASTToCType(struct ASTToC *self,struct ASTType *type,struct LinkedList *arra
             ACHIOR_LABS_FPRINTF(handle,"i64 ");
             break;
         }
+        case AST_DATA_TYPE_ISIZE:
+        {
+            ACHIOR_LABS_FPRINTF(handle,"size_t ");
+            break;
+        }
         case AST_DATA_TYPE_U8:
         {
             ACHIOR_LABS_FPRINTF(handle,"u8 ");
@@ -690,6 +777,11 @@ void ASTToCType(struct ASTToC *self,struct ASTType *type,struct LinkedList *arra
         case AST_DATA_TYPE_U64:
         {
             ACHIOR_LABS_FPRINTF(handle,"u64 ");
+            break;
+        }
+        case AST_DATA_TYPE_USIZE:
+        {
+            ACHIOR_LABS_FPRINTF(handle,"ssize_t ");
             break;
         }
         case AST_DATA_TYPE_STRING:
@@ -739,7 +831,7 @@ void ASTToCType(struct ASTToC *self,struct ASTType *type,struct LinkedList *arra
         }
         default:
         {
-            ACHIOR_LABS_FPRINTF(handle,"%d [type] \n",type->dataType);
+            ACHIOR_LABS_FPRINTF(handle,"%d [type] - ",type->dataType);
             ACHIOR_LABS_FPRINTF(handle,"unknown-type");
         }
     }	    
@@ -853,6 +945,12 @@ void ASTToCVariableDeclStmt(struct ASTToC *self,struct ASTVariableDecl *stmt,cha
     
     LinkedListNew(&arrayBuffer,self->bump);
 
+    if(ACHIOR_LABS_TRUE(stmt->isConstant))
+    {
+        ACHIOR_LABS_FPRINTF(self->cFileHandle,"const ");
+    }
+
+
     ASTToCType(self,stmt->type,&arrayBuffer,true);
     ASTToCIdentifier(self,stmt->ident,true);
 
@@ -872,7 +970,7 @@ void ASTToCVariableDeclStmt(struct ASTToC *self,struct ASTVariableDecl *stmt,cha
     if(ACHIOR_LABS_NOT_NULL(stmt->init))
     {
         ACHIOR_LABS_FPRINTF(self->cFileHandle," = ");
-        ASTToCVariableDeclInit(self,stmt->init);
+        ASTToCVariableDeclInit(self,stmt->init,true);
     }
 
     ACHIOR_LABS_FPRINTF(self->cFileHandle,";");
@@ -880,13 +978,20 @@ void ASTToCVariableDeclStmt(struct ASTToC *self,struct ASTVariableDecl *stmt,cha
 
 
 
-void ASTToCVariableDeclInit(struct ASTToC *self,struct ASTVariableDeclInit *init)
+void ASTToCVariableDeclInit(struct ASTToC *self,struct ASTVariableDeclInit *init,bool cFile)
 {
     if( ACHIOR_LABS_NULL(init))
     {
         return;
     }
 
+    ACHIOR_LABS_PTR_INIT(FILE,handle);
+    handle = self->hFileHandle;
+
+    if(ACHIOR_LABS_TRUE(cFile))
+    {
+        handle = self->cFileHandle;
+    }
 
     switch(ASTVARIABLEDECLINIT_GET_INITKIND(*init))
     {
@@ -895,7 +1000,7 @@ void ASTToCVariableDeclInit(struct ASTToC *self,struct ASTVariableDeclInit *init
             ACHIOR_LABS_PTR_INIT(struct ASTVariableDeclSingleInit,singleInit);
             singleInit = init->init;
 
-            ASTToCExpression(self,singleInit->expr,true);
+            ASTToCExpression(self,singleInit->expr,cFile);
             break;
         }
         case AST_VAR_DECL_INIT_ARRAY_INIT:
@@ -912,15 +1017,15 @@ void ASTToCVariableDeclInit(struct ASTToC *self,struct ASTVariableDeclInit *init
             for(u64 i = 0; i < elementLength; i++)
             {
                 tmpInit = LinkedListAt(&arrayInit->elements,i);
-                ASTToCVariableDeclInit(self,tmpInit);
+                ASTToCVariableDeclInit(self,tmpInit,cFile);
 
                 if(ACHIOR_LABS_LESS(i,elementLength - 1))
                 {
-                    ACHIOR_LABS_FPRINTF(self->cFileHandle,",");
+                    ACHIOR_LABS_FPRINTF(handle,",");
                 }
             }
 
-            ACHIOR_LABS_FPRINTF(self->cFileHandle,"}");
+            ACHIOR_LABS_FPRINTF(handle,"}");
 
             break;
         }
